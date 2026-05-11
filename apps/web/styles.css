@@ -581,6 +581,14 @@ input[type="search"] {
   align-items: start;
 }
 
+.admin-grid {
+  align-items: start;
+}
+
+.admin-operator-item {
+  width: 100%;
+}
+
 .stack-list {
   display: grid;
   gap: 14px;

@@ -24,6 +24,7 @@ const operatorMenu = [
 ];
 
 const state = {
+  adminSelectedOperatorId: "",
   operatorView: "dashboard",
   customerFormOpen: false,
   dashboardFilters: {
@@ -33,6 +34,10 @@ const state = {
   quickPayCustomerId: "",
   data: {
     operators: [],
+    selectedOperator: null,
+    selectedOperatorSettings: null,
+    selectedOperatorMetrics: null,
+    selectedOperatorAdmins: [],
     customers: [],
     packages: [],
     payments: [],
@@ -246,14 +251,26 @@ function renderAdminShell(user) {
           </form>
         </section>
 
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Business List</p>
-              <h2>All Accounts</h2>
+        <section class="split-grid admin-grid">
+          <article class="panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Business List</p>
+                <h2>All Accounts</h2>
+              </div>
             </div>
-          </div>
-          <div id="operatorsList" class="list-grid"></div>
+            <div id="operatorsList" class="stack-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Account Control</p>
+                <h2>Management</h2>
+              </div>
+            </div>
+            <div id="adminOperatorDetail">${renderAdminEmptyState()}</div>
+          </article>
         </section>
       </main>
     </div>
@@ -283,6 +300,61 @@ function renderAdminShell(user) {
       showStatus("Account create nahi hua.", "error");
     }
   });
+}
+
+function renderAdminEmptyState() {
+  return `<div class="empty-state">Select a business account to manage login, plan, subscription status and billing settings.</div>`;
+}
+
+function renderAdminOperatorDetail() {
+  const item = state.data.selectedOperator;
+  const settings = state.data.selectedOperatorSettings;
+  const metrics = state.data.selectedOperatorMetrics;
+  const adminUser = state.data.selectedOperatorAdmins?.[0];
+
+  if (!item) return renderAdminEmptyState();
+
+  return `
+    <div class="menu-grid">
+      <article class="menu-card"><h3>Plan</h3><p>${item.plan}</p><span>Subscription status: ${item.subscriptionStatus}</span></article>
+      <article class="menu-card"><h3>Customers</h3><p>${metrics?.activeCustomers || 0}</p><span>Pending due: ${formatMoney(metrics?.pendingCollections || 0)}</span></article>
+      <article class="menu-card"><h3>Collection</h3><p>${formatMoney(metrics?.totalCollection || 0)}</p><span>Monthly counter: ${formatMoney(metrics?.monthCollection || 0)}</span></article>
+      <article class="menu-card"><h3>Login</h3><p>${adminUser?.email || "-"}</p><span>${adminUser?.name || "No admin mapped"}</span></article>
+    </div>
+
+    <form id="operatorManageForm" class="form-grid two-col-grid">
+      <label>Business Name<input name="businessName" value="${item.businessName || ""}" required /></label>
+      <label>Owner Name<input name="ownerName" value="${item.ownerName || ""}" required /></label>
+      <label>City<input name="city" value="${item.city || ""}" /></label>
+      <label>Mobile<input name="mobile" value="${item.mobile || ""}" /></label>
+      <label>Plan
+        <select name="plan">
+          <option value="Trial" ${item.plan === "Trial" ? "selected" : ""}>Trial</option>
+          <option value="Basic" ${item.plan === "Basic" ? "selected" : ""}>Basic</option>
+          <option value="Standard" ${item.plan === "Standard" ? "selected" : ""}>Standard</option>
+          <option value="Premium" ${item.plan === "Premium" ? "selected" : ""}>Premium</option>
+        </select>
+      </label>
+      <label>Status
+        <select name="subscriptionStatus">
+          <option value="trial" ${item.subscriptionStatus === "trial" ? "selected" : ""}>Trial</option>
+          <option value="active" ${item.subscriptionStatus === "active" ? "selected" : ""}>Active</option>
+          <option value="suspended" ${item.subscriptionStatus === "suspended" ? "selected" : ""}>Suspended</option>
+          <option value="expired" ${item.subscriptionStatus === "expired" ? "selected" : ""}>Expired</option>
+        </select>
+      </label>
+      <label>SMS Credits<input name="smsCredits" type="number" value="${item.smsCredits || 0}" /></label>
+      <label>Firm Name<input name="companyName" value="${settings?.companyName || ""}" /></label>
+      <label>Support Mobile<input name="supportMobile" value="${settings?.supportMobile || ""}" /></label>
+      <label>Address<input name="address" value="${settings?.address || ""}" /></label>
+      <div class="form-actions"><button class="primary-btn" type="submit">Save Account Changes</button></div>
+    </form>
+
+    <div class="toolbar">
+      <button type="button" id="resetOperatorPasswordBtn" class="ghost-btn">Reset Operator Password</button>
+      <button type="button" id="toggleOperatorStatusBtn" class="ghost-btn">${item.subscriptionStatus === "suspended" ? "Activate Account" : "Suspend Account"}</button>
+    </div>
+  `;
 }
 
 function renderOperatorShell(user, tenant) {
@@ -1037,6 +1109,47 @@ function renderAcsEventTable(items, onts) {
   `;
 }
 
+function renderOperatorsAdminList(items) {
+  if (!items.length) {
+    return `<div class="empty-state">No business accounts created yet.</div>`;
+  }
+
+  return items
+    .map((item) => {
+      const selected = state.adminSelectedOperatorId === item.id;
+      const adminEmail = item.users?.[0]?.email || "-";
+      return `
+        <button type="button" class="nav-item ${selected ? "active-nav" : ""} admin-operator-item" data-operator-id="${item.id}">
+          <strong>${item.businessName}</strong>
+          <span>${item.ownerName} | ${item.city || "-"}</span>
+          <span>${item.plan} | ${item.subscriptionStatus}</span>
+          <span>${adminEmail}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+async function loadAdminOperatorDetail(operatorId) {
+  const response = await fetchJson(`/operators/${operatorId}`);
+  state.adminSelectedOperatorId = operatorId;
+  state.data.selectedOperator = response.item;
+  state.data.selectedOperatorSettings = response.settings;
+  state.data.selectedOperatorMetrics = response.metrics;
+  state.data.selectedOperatorAdmins = response.adminUsers || [];
+
+  const detail = document.getElementById("adminOperatorDetail");
+  if (detail) {
+    detail.innerHTML = renderAdminOperatorDetail();
+    attachAdminDetailEvents();
+  }
+
+  const list = document.getElementById("operatorsList");
+  if (list) {
+    list.innerHTML = renderOperatorsAdminList(state.data.operators);
+  }
+}
+
 function attachCommonEvents() {
   document.getElementById("logoutBtn").addEventListener("click", async () => {
     try {
@@ -1347,7 +1460,57 @@ function attachOperatorSectionEvents() {
 
 }
 
+function attachAdminDetailEvents() {
+  const operatorManageForm = document.getElementById("operatorManageForm");
+  if (operatorManageForm) {
+    operatorManageForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      await fetchJson(`/operators/${state.adminSelectedOperatorId}`, {
+        method: "PATCH",
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      await loadPlatformOwnerData();
+      await loadAdminOperatorDetail(state.adminSelectedOperatorId);
+      showStatus("Business account updated successfully.");
+    });
+  }
+
+  const resetBtn = document.getElementById("resetOperatorPasswordBtn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      const newPassword = window.prompt("New password (leave blank to auto-generate)");
+      const response = await fetchJson(`/operators/${state.adminSelectedOperatorId}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ newPassword }),
+      });
+      showStatus(`Password reset. Login: ${response.login.email} / ${response.login.password}`);
+    });
+  }
+
+  const toggleBtn = document.getElementById("toggleOperatorStatusBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", async () => {
+      const current = state.data.selectedOperator?.subscriptionStatus;
+      const next = current === "suspended" ? "active" : "suspended";
+      await fetchJson(`/operators/${state.adminSelectedOperatorId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ subscriptionStatus: next }),
+      });
+      await loadPlatformOwnerData();
+      await loadAdminOperatorDetail(state.adminSelectedOperatorId);
+      showStatus(`Account ${next === "active" ? "activated" : "suspended"} successfully.`);
+    });
+  }
+}
+
 document.addEventListener("click", async (event) => {
+  const adminOperatorButton = event.target.closest(".admin-operator-item[data-operator-id]");
+  if (adminOperatorButton) {
+    await loadAdminOperatorDetail(adminOperatorButton.dataset.operatorId);
+    return;
+  }
+
   const navButton = event.target.closest("#operatorNav [data-view]");
   if (navButton) {
     state.operatorView = navButton.dataset.view;
@@ -1378,18 +1541,16 @@ async function loadPlatformOwnerData() {
   ]);
 
   state.data.operators = operatorsResponse.items;
-  document.getElementById("operatorsList").innerHTML = operatorsResponse.items
-    .map(
-      (item) => `
-        <article class="operator-card">
-          <div class="badge ${badgeClass(item.subscriptionStatus)}">${item.subscriptionStatus}</div>
-          <h3>${item.businessName}</h3>
-          <p>${item.city} | ${item.plan} | ${item.ownerName}</p>
-          <p class="meta-line">Customers: ${item.activeCustomers} | Collection: ${formatMoney(item.monthlyCollection)}</p>
-        </article>
-      `,
-    )
-    .join("");
+  const list = document.getElementById("operatorsList");
+  if (list) {
+    list.innerHTML = renderOperatorsAdminList(operatorsResponse.items);
+  }
+
+  if (!state.adminSelectedOperatorId && operatorsResponse.items[0]?.id) {
+    await loadAdminOperatorDetail(operatorsResponse.items[0].id);
+  } else if (state.adminSelectedOperatorId) {
+    await loadAdminOperatorDetail(state.adminSelectedOperatorId);
+  }
 }
 
 async function loadOperatorData() {

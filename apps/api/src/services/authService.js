@@ -90,3 +90,15 @@ export async function registerOperatorAdmin({ email, password, tenantId, name })
 
   return { ok: true, user: sanitizeUser(user) };
 }
+
+export async function resetUserPassword(userId, newPassword) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { ok: false, message: "User not found" };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+  });
+
+  return { ok: true };
+}
