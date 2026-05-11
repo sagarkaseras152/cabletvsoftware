@@ -27,6 +27,10 @@ const state = {
   adminSelectedOperatorId: "",
   operatorView: "dashboard",
   customerFormOpen: false,
+  customerImportPreview: null,
+  customerImportFileName: "",
+  customerImportMode: "skip_duplicates",
+  statusTimer: null,
   dashboardFilters: {
     dueStart: "",
     dueEnd: "",
@@ -146,6 +150,16 @@ function showStatus(message, type = "success") {
   if (box) {
     box.innerHTML = `<div class="feedback ${type}">${message}</div>`;
   }
+  if (state.statusTimer) {
+    clearTimeout(state.statusTimer);
+    state.statusTimer = null;
+  }
+  if (message && box) {
+    state.statusTimer = window.setTimeout(() => {
+      const current = document.getElementById("statusBox");
+      if (current) current.innerHTML = "";
+    }, 4200);
+  }
 }
 
 function parseErrorMessage(error, fallback = "Request failed.") {
@@ -156,6 +170,153 @@ function parseErrorMessage(error, fallback = "Request failed.") {
   }
 
   return error?.message || fallback;
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseCsvText(text) {
+  const rows = [];
+  let current = "";
+  let row = [];
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(current);
+      current = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(current);
+      rows.push(row);
+      row = [];
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length || row.length) {
+    row.push(current);
+    rows.push(row);
+  }
+
+  return rows.filter((item) => item.some((cell) => String(cell || "").trim()));
+}
+
+function normalizeImportKey(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function mapImportRowsFromCsv(text) {
+  const parsedRows = parseCsvText(text);
+  if (parsedRows.length < 2) {
+    throw new Error("CSV me header aur kam se kam 1 data row hona chahiye.");
+  }
+
+  const headers = parsedRows[0].map((item) => normalizeImportKey(item));
+  const aliasMap = {
+    name: "name",
+    customername: "name",
+    fullname: "name",
+    mobile: "mobile",
+    mobilenumber: "mobile",
+    phone: "mobile",
+    customercode: "customerCode",
+    customerid: "customerCode",
+    code: "customerCode",
+    area: "area",
+    locality: "area",
+    package: "packageName",
+    packagename: "packageName",
+    plan: "packageName",
+    due: "dueAmount",
+    dueamount: "dueAmount",
+    amountdue: "dueAmount",
+    duedate: "dueDate",
+    expirydate: "expiryDate",
+    connectiontype: "connectionType",
+    service: "connectionType",
+  };
+
+  const mappedHeaders = headers.map((header) => aliasMap[header] || "");
+  if (!mappedHeaders.includes("name") || !mappedHeaders.includes("mobile")) {
+    throw new Error("CSV header me kam se kam Name aur Mobile columns chahiye.");
+  }
+
+  return parsedRows.slice(1).map((row) => {
+    const mapped = {};
+    mappedHeaders.forEach((key, index) => {
+      if (!key) return;
+      mapped[key] = String(row[index] || "").trim();
+    });
+    return mapped;
+  }).filter((item) => Object.values(item).some((value) => String(value || "").trim()));
+}
+
+function renderCustomerImportPreview(preview) {
+  if (!preview) {
+    return `<div class="empty-state">CSV upload karo, preview dekho, phir safe import chalao.</div>`;
+  }
+
+  return `
+    <div class="import-summary-grid">
+      <article class="menu-card"><h3>Total Rows</h3><p>${preview.summary.totalRows}</p></article>
+      <article class="menu-card"><h3>New Create</h3><p>${preview.summary.createCount}</p></article>
+      <article class="menu-card"><h3>Update Match</h3><p>${preview.summary.updateCount}</p></article>
+      <article class="menu-card"><h3>Skip / Issue</h3><p>${preview.summary.skipCount}</p></article>
+    </div>
+    ${tableWrapper(`
+      <table>
+        <thead><tr><th>Row</th><th>Name</th><th>Mobile</th><th>Package</th><th>Action</th><th>Issues</th></tr></thead>
+        <tbody>
+          ${preview.items
+            .slice(0, 15)
+            .map(
+              (item) => `
+                <tr>
+                  <td>${item.rowNumber}</td>
+                  <td>${escapeHtml(item.name)}</td>
+                  <td>${escapeHtml(item.mobile)}</td>
+                  <td>${escapeHtml(item.packageRef || "-")}</td>
+                  <td><span class="badge ${badgeClass(item.action === "create" ? "success" : item.action === "update" ? "warning" : "danger")}">${item.action}</span></td>
+                  <td>${item.issues.length ? escapeHtml(item.issues.join(", ")) : "-"}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `)}
+    ${preview.items.length > 15 ? `<p class="subtle-note">Preview me first 15 rows dikh rahi hain. Import sab rows par chalega.</p>` : ""}
+  `;
 }
 
 function renderLogin(message = "") {
@@ -500,9 +661,36 @@ function renderOperatorView() {
       <section class="panel">
         <div class="section-head">
           <div><p class="eyebrow">Customers</p><h2>Customer List</h2></div>
-          <button type="button" id="toggleCustomerForm" class="primary-btn">
-            ${state.customerFormOpen ? "Close Form" : "Add New Customer"}
-          </button>
+          <div class="toolbar">
+            <button type="button" id="toggleCustomerForm" class="primary-btn">
+              ${state.customerFormOpen ? "Close Form" : "Add New Customer"}
+            </button>
+          </div>
+        </div>
+        <div class="inline-form-block import-block">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Migration Import</p>
+              <h3>Upload Excel CSV Safely</h3>
+              <p class="subtle-note">Dusre software se customer export ko CSV me save karke upload karo. Pehle preview aayega, phir safe import chalega.</p>
+            </div>
+          </div>
+          <form id="customerImportForm" class="form-grid import-form">
+            <label>CSV File<input id="customerImportFile" name="file" type="file" accept=".csv,text/csv" required /></label>
+            <label>Import Mode
+              <select id="customerImportMode" name="importMode">
+                <option value="skip_duplicates" ${state.customerImportMode === "skip_duplicates" ? "selected" : ""}>Safe Mode: Existing skip</option>
+                <option value="update_existing" ${state.customerImportMode === "update_existing" ? "selected" : ""}>Update matched existing</option>
+              </select>
+            </label>
+            <div class="form-actions">
+              <button class="ghost-btn" type="button" id="downloadCustomerTemplate">Download Sample Header</button>
+              <button class="primary-btn" type="submit">Preview Import</button>
+            </div>
+          </form>
+          ${state.customerImportFileName ? `<p class="subtle-note">Selected file: ${escapeHtml(state.customerImportFileName)}</p>` : ""}
+          <div id="customerImportPreviewWrap">${renderCustomerImportPreview(state.customerImportPreview)}</div>
+          ${state.customerImportPreview ? `<div class="toolbar"><button type="button" id="confirmCustomerImport" class="primary-btn">Run Safe Import</button><button type="button" id="clearCustomerImport" class="ghost-btn">Clear Preview</button></div>` : ""}
         </div>
         ${state.customerFormOpen
           ? `
@@ -1328,6 +1516,87 @@ function attachOperatorSectionEvents() {
       await loadOperatorData();
       renderOperatorView();
       showStatus("Customer added successfully.");
+    });
+  }
+
+  const downloadCustomerTemplate = document.getElementById("downloadCustomerTemplate");
+  if (downloadCustomerTemplate) {
+    downloadCustomerTemplate.addEventListener("click", () => {
+      const csv = "name,mobile,customerCode,area,packageName,dueAmount,dueDate,expiryDate,connectionType\nAmit Sharma,9876543210,CUS-1001,Palasia,Basic 50 Mbps,500,2026-05-20,2026-05-20,internet";
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "customer-import-sample.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    });
+  }
+
+  const customerImportForm = document.getElementById("customerImportForm");
+  if (customerImportForm) {
+    customerImportForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const fileInput = document.getElementById("customerImportFile");
+      const modeInput = document.getElementById("customerImportMode");
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showStatus("CSV file select karo.", "error");
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const rows = mapImportRowsFromCsv(text);
+        const preview = await fetchJson("/customers/import-preview", {
+          method: "POST",
+          body: JSON.stringify({ rows }),
+        });
+        state.customerImportPreview = { ...preview, rows };
+        state.customerImportFileName = file.name;
+        state.customerImportMode = modeInput?.value || "skip_duplicates";
+        renderOperatorView();
+        showStatus("Import preview ready. Review karke safe import chalao.");
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "CSV preview ban nahi paya."), "error");
+      }
+    });
+  }
+
+  const confirmCustomerImport = document.getElementById("confirmCustomerImport");
+  if (confirmCustomerImport) {
+    confirmCustomerImport.addEventListener("click", async () => {
+      if (!state.customerImportPreview?.rows?.length) {
+        showStatus("Pehle preview chalao.", "error");
+        return;
+      }
+
+      try {
+        const response = await fetchJson("/customers/import", {
+          method: "POST",
+          body: JSON.stringify({
+            rows: state.customerImportPreview.rows,
+            mode: state.customerImportMode,
+          }),
+        });
+        state.customerImportPreview = null;
+        state.customerImportFileName = "";
+        await loadOperatorData();
+        renderOperatorView();
+        showStatus(`Import done. Created: ${response.summary.created}, Updated: ${response.summary.updated}, Skipped: ${response.summary.skipped}`);
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "Customer import fail ho gaya."), "error");
+      }
+    });
+  }
+
+  const clearCustomerImport = document.getElementById("clearCustomerImport");
+  if (clearCustomerImport) {
+    clearCustomerImport.addEventListener("click", () => {
+      state.customerImportPreview = null;
+      state.customerImportFileName = "";
+      renderOperatorView();
     });
   }
 

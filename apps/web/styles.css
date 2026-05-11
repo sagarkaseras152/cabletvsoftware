@@ -501,6 +501,22 @@ button:hover,
   border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
+.import-block {
+  display: grid;
+  gap: 16px;
+}
+
+.import-form {
+  grid-template-columns: 1.2fr 1fr auto;
+  align-items: end;
+}
+
+.import-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -689,7 +705,9 @@ input[type="search"] {
 
 @media (max-width: 900px) {
   .split-grid,
-  .two-col-grid {
+  .two-col-grid,
+  .import-form,
+  .import-summary-grid {
     grid-template-columns: 1fr;
   }
 
