@@ -10,6 +10,7 @@ import operatorsRouter from "./operators.js";
 import ontsRouter from "./onts.js";
 import packagesRouter from "./packages.js";
 import paymentsRouter from "./payments.js";
+import publicRouter from "./public.js";
 import rechargesRouter from "./recharges.js";
 import reportsRouter from "./reports.js";
 import settingsRouter from "./settings.js";
@@ -25,6 +26,7 @@ router.use("/operators", operatorsRouter);
 router.use("/customers", customersRouter);
 router.use("/packages", packagesRouter);
 router.use("/payments", paymentsRouter);
+router.use("/public", publicRouter);
 router.use("/recharges", rechargesRouter);
 router.use("/reports", reportsRouter);
 router.use("/staff", staffRouter);
@@ -45,6 +47,7 @@ router.get("/", (_req, res) => {
       customers: "/api/customers",
       packages: "/api/packages",
       payments: "/api/payments",
+      publicPayments: "/api/public/payment-lookup",
       recharges: "/api/recharges",
       reports: "/api/reports",
       staff: "/api/staff",

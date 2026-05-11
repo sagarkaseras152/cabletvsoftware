@@ -24,6 +24,7 @@ model Tenant {
   customers          Customer[]
   packages           Package[]
   payments           Payment[]
+  paymentRequests    PaymentRequest[]
   recharges          Recharge[]
   staffMembers       StaffMember[]
   expenses           Expense[]
@@ -98,6 +99,26 @@ model Payment {
   createdAt     DateTime @default(now())
 }
 
+model PaymentRequest {
+  id              String   @id
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  customerId      String
+  customerName    String
+  customerMobile  String
+  amount          Float
+  utrNumber       String?
+  note            String?
+  paidAt          String?
+  status          String   @default("pending")
+  paymentMode     String   @default("upi_qr")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  linkedPaymentId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Recharge {
   id            String   @id
   tenantId      String
@@ -142,6 +163,10 @@ model TenantSetting {
   lateFee        Float   @default(0)
   supportMobile  String?
   address        String?
+  paymentDisplayName String?
+  upiId          String?
+  qrImageUrl     String?
+  qrInstructions String?
   acsUsername    String?
   acsPassword    String?
   defaultAcsProfile String? @default("tr181")

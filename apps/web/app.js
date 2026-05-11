@@ -25,12 +25,18 @@ const operatorMenu = [
 
 const state = {
   adminSelectedOperatorId: "",
+  adminFormMode: "create",
   operatorView: "dashboard",
   customerFormOpen: false,
   customerImportPreview: null,
   customerImportFileName: "",
   customerImportMode: "skip_duplicates",
   statusTimer: null,
+  publicPayment: {
+    operatorCode: "",
+    customerRef: "",
+    lookup: null,
+  },
   dashboardFilters: {
     dueStart: "",
     dueEnd: "",
@@ -45,6 +51,7 @@ const state = {
     customers: [],
     packages: [],
     payments: [],
+    paymentRequests: [],
     recharges: [],
     reports: [],
     staff: [],
@@ -56,6 +63,10 @@ const state = {
     settings: null,
   },
 };
+
+function isCustomerPortalMode() {
+  return window.location.hash.startsWith("#customer-pay");
+}
 
 function getSession() {
   const raw = localStorage.getItem(storageKey);
@@ -82,7 +93,7 @@ async function fetchJson(path, options = {}) {
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && session?.token) {
       clearSession();
       renderLogin("Session expired. Please log in again.");
     }
@@ -350,6 +361,9 @@ function renderLogin(message = "") {
             </label>
             <button class="primary-btn" type="submit">Sign In</button>
           </form>
+          <div class="toolbar">
+            <button id="openCustomerPayPortal" class="ghost-btn" type="button">Customer Payment</button>
+          </div>
         </section>
       </div>
     </div>
@@ -372,6 +386,102 @@ function renderLogin(message = "") {
     } catch (_error) {
       renderLogin("Email ya password galat hai.");
     }
+  });
+
+  document.getElementById("openCustomerPayPortal").addEventListener("click", () => {
+    window.location.hash = "#customer-pay";
+    renderPublicCustomerPaymentPortal();
+  });
+}
+
+function renderPublicCustomerPaymentPortal(message = "", messageType = "error") {
+  const lookup = state.publicPayment.lookup;
+  appRoot.innerHTML = `
+    <div class="auth-shell">
+      <div class="auth-card">
+        <section class="auth-brand">
+          <p class="eyebrow">Customer Payment</p>
+          <h1>Pay your operator using the assigned QR.</h1>
+          <p class="lede">
+            Operator ka code aur apna mobile ya customer code dalo. Aapko wahi operator ka QR aur payment confirmation form dikhega.
+          </p>
+        </section>
+        <section class="auth-form">
+          <p class="eyebrow">Secure Payment Lookup</p>
+          <h2>Find your account</h2>
+          ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
+          <form id="publicPaymentLookupForm" class="form-grid">
+            <label>Operator Code<input name="operatorCode" value="${escapeHtml(state.publicPayment.operatorCode)}" placeholder="Example: DEMOOP1" required /></label>
+            <label>Customer Mobile / Code<input name="customerRef" value="${escapeHtml(state.publicPayment.customerRef)}" placeholder="Mobile ya customer code" required /></label>
+            <button class="primary-btn" type="submit">Show Payment QR</button>
+          </form>
+          ${lookup ? `
+            <div class="inline-form-block public-payment-card">
+              <p class="eyebrow">Operator Payment</p>
+              <h3>${escapeHtml(lookup.operator.paymentDisplayName || lookup.operator.businessName)}</h3>
+              <p class="subtle-note">${escapeHtml(lookup.customer.name)} | ${escapeHtml(lookup.customer.mobile)} | Due ${formatMoney(lookup.customer.dueAmount)}</p>
+              ${lookup.operator.qrImageUrl ? `<img class="qr-preview" src="${escapeHtml(lookup.operator.qrImageUrl)}" alt="Operator QR" />` : `<div class="empty-state">QR image abhi set nahi hai. UPI ID: <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong></div>`}
+              <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
+              <form id="publicPaymentSubmitForm" class="form-grid">
+                <input type="hidden" name="operatorCode" value="${escapeHtml(state.publicPayment.operatorCode)}" />
+                <input type="hidden" name="customerRef" value="${escapeHtml(state.publicPayment.customerRef)}" />
+                <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
+                <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
+                <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
+                <button class="primary-btn" type="submit">Submit Payment Confirmation</button>
+              </form>
+            </div>
+          ` : ""}
+          <div class="toolbar">
+            <button id="backToLoginBtn" class="ghost-btn" type="button">Back to Login</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("publicPaymentLookupForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    state.publicPayment.operatorCode = String(formData.get("operatorCode") || "").trim().toUpperCase();
+    state.publicPayment.customerRef = String(formData.get("customerRef") || "").trim();
+    try {
+      const response = await fetchJson("/public/payment-lookup", {
+        method: "POST",
+        body: JSON.stringify({
+          operatorCode: state.publicPayment.operatorCode,
+          customerRef: state.publicPayment.customerRef,
+        }),
+      });
+      state.publicPayment.lookup = response;
+      renderPublicCustomerPaymentPortal();
+    } catch (error) {
+      renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Customer lookup fail ho gaya."), "error");
+    }
+  });
+
+  const publicPaymentSubmitForm = document.getElementById("publicPaymentSubmitForm");
+  if (publicPaymentSubmitForm) {
+    publicPaymentSubmitForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      try {
+        await fetchJson("/public/payment-request", {
+          method: "POST",
+          body: JSON.stringify(Object.fromEntries(formData.entries())),
+        });
+        state.publicPayment.lookup = null;
+        renderPublicCustomerPaymentPortal("Payment request submit ho gaya. Operator approval ke baad software me auto entry ho jayegi.", "success");
+      } catch (error) {
+        renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Payment request submit nahi hua."), "error");
+      }
+    });
+  }
+
+  document.getElementById("backToLoginBtn").addEventListener("click", () => {
+    state.publicPayment.lookup = null;
+    window.location.hash = "";
+    renderLogin();
   });
 }
 
@@ -402,25 +512,7 @@ function renderAdminShell(user) {
       </header>
 
       <main class="content-grid">
-        <section class="panel">
-          <div id="statusBox"></div>
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Account Onboarding</p>
-              <h2>Create Business Account</h2>
-            </div>
-          </div>
-          <form id="operatorCreateForm" class="form-grid two-col-grid">
-            <label>Business Name<input name="businessName" required /></label>
-            <label>Owner Name<input name="ownerName" required /></label>
-            <label>City<input name="city" /></label>
-            <label>Mobile<input name="mobile" required /></label>
-            <label>Login Email<input name="email" type="email" required /></label>
-            <label>Password<input name="password" required /></label>
-            <label>Plan<input name="plan" value="Trial" /></label>
-            <div class="form-actions"><button class="primary-btn" type="submit">Create Account</button></div>
-          </form>
-        </section>
+        <section id="adminFormPanel" class="panel">${renderAdminFormPanel()}</section>
 
         <section class="split-grid admin-grid">
           <article class="panel">
@@ -448,30 +540,117 @@ function renderAdminShell(user) {
   `;
 
   attachCommonEvents();
-  document.getElementById("operatorCreateForm").addEventListener("submit", async (event) => {
+  attachAdminFormEvents();
+}
+
+function renderAdminFormPanel() {
+  const isEdit = state.adminFormMode === "edit" && state.data.selectedOperator;
+  const item = state.data.selectedOperator || {};
+  const settings = state.data.selectedOperatorSettings || {};
+  const adminUser = state.data.selectedOperatorAdmins?.[0] || {};
+
+  return `
+    <div id="statusBox"></div>
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Account Onboarding</p>
+        <h2>${isEdit ? "Edit Business Account" : "Create Business Account"}</h2>
+      </div>
+      <div class="toolbar">
+        ${isEdit ? `<button type="button" id="adminCreateNewBtn" class="ghost-btn">Create New</button>` : ""}
+      </div>
+    </div>
+    <form id="operatorCreateForm" class="form-grid two-col-grid">
+      <label>Business Name<input name="businessName" value="${escapeHtml(item.businessName || "")}" required /></label>
+      <label>Owner Name<input name="ownerName" value="${escapeHtml(item.ownerName || "")}" required /></label>
+      <label>City<input name="city" value="${escapeHtml(item.city || "")}" /></label>
+      <label>Mobile<input name="mobile" value="${escapeHtml(item.mobile || "")}" required /></label>
+      <label>Login Email<input name="email" type="email" value="${escapeHtml(adminUser.email || "")}" ${isEdit ? "readonly" : ""} required /></label>
+      <label>${isEdit ? "Subscription Status" : "Password"}${isEdit
+        ? `<select name="subscriptionStatus">
+            <option value="trial" ${item.subscriptionStatus === "trial" ? "selected" : ""}>Trial</option>
+            <option value="active" ${item.subscriptionStatus === "active" ? "selected" : ""}>Active</option>
+            <option value="suspended" ${item.subscriptionStatus === "suspended" ? "selected" : ""}>Suspended</option>
+            <option value="expired" ${item.subscriptionStatus === "expired" ? "selected" : ""}>Expired</option>
+          </select>`
+        : `<input name="password" required />`}</label>
+      <label>Plan<input name="plan" value="${escapeHtml(item.plan || "Trial")}" /></label>
+      ${isEdit ? `
+        <label>Firm Name<input name="companyName" value="${escapeHtml(settings.companyName || "")}" /></label>
+        <label>Support Mobile<input name="supportMobile" value="${escapeHtml(settings.supportMobile || "")}" /></label>
+        <label>Address<input name="address" value="${escapeHtml(settings.address || "")}" /></label>
+        <label>SMS Credits<input name="smsCredits" type="number" value="${item.smsCredits || 0}" /></label>
+      ` : ""}
+      <div class="form-actions"><button class="primary-btn" type="submit">${isEdit ? "Save Account Changes" : "Create Account"}</button></div>
+    </form>
+  `;
+}
+
+function attachAdminFormEvents() {
+  const operatorCreateForm = document.getElementById("operatorCreateForm");
+  if (!operatorCreateForm) return;
+
+  operatorCreateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(event.currentTarget);
     try {
-      const response = await fetchJson("/operators", {
-        method: "POST",
-        body: JSON.stringify({
-          businessName: formData.get("businessName"),
-          ownerName: formData.get("ownerName"),
-          city: formData.get("city"),
-          mobile: formData.get("mobile"),
-          email: formData.get("email"),
-          password: formData.get("password"),
-          plan: formData.get("plan"),
-        }),
-      });
-      showStatus("Business account created successfully.");
-      form.reset();
+      if (state.adminFormMode === "edit" && state.adminSelectedOperatorId) {
+        await fetchJson(`/operators/${state.adminSelectedOperatorId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            businessName: formData.get("businessName"),
+            ownerName: formData.get("ownerName"),
+            city: formData.get("city"),
+            mobile: formData.get("mobile"),
+            plan: formData.get("plan"),
+            subscriptionStatus: formData.get("subscriptionStatus"),
+            companyName: formData.get("companyName"),
+            supportMobile: formData.get("supportMobile"),
+            address: formData.get("address"),
+            smsCredits: formData.get("smsCredits"),
+          }),
+        });
+        showStatus("Business account updated successfully.");
+      } else {
+        await fetchJson("/operators", {
+          method: "POST",
+          body: JSON.stringify({
+            businessName: formData.get("businessName"),
+            ownerName: formData.get("ownerName"),
+            city: formData.get("city"),
+            mobile: formData.get("mobile"),
+            email: formData.get("email"),
+            password: formData.get("password"),
+            plan: formData.get("plan"),
+          }),
+        });
+        showStatus("Business account created successfully.");
+        form.reset();
+      }
       await hydrateDashboard();
     } catch (error) {
       showStatus(parseErrorMessage(error, "Account create nahi hua."), "error");
     }
   });
+
+  const adminCreateNewBtn = document.getElementById("adminCreateNewBtn");
+  if (adminCreateNewBtn) {
+    adminCreateNewBtn.addEventListener("click", () => {
+      state.adminFormMode = "create";
+      state.adminSelectedOperatorId = "";
+      state.data.selectedOperator = null;
+      state.data.selectedOperatorSettings = null;
+      state.data.selectedOperatorAdmins = [];
+      const panel = document.getElementById("adminFormPanel");
+      if (panel) {
+        panel.innerHTML = renderAdminFormPanel();
+        attachAdminFormEvents();
+      }
+      const detail = document.getElementById("adminOperatorDetail");
+      if (detail) detail.innerHTML = renderAdminEmptyState();
+    });
+  }
 }
 
 function renderAdminEmptyState() {
@@ -523,6 +702,7 @@ function renderAdminOperatorDetail() {
     </form>
 
     <div class="toolbar">
+      <button type="button" id="editOperatorInFormBtn" class="ghost-btn">Edit In Form</button>
       <button type="button" id="resetOperatorPasswordBtn" class="ghost-btn">Reset Operator Password</button>
       <button type="button" id="toggleOperatorStatusBtn" class="ghost-btn">${item.subscriptionStatus === "suspended" ? "Activate Account" : "Suspend Account"}</button>
     </div>
@@ -744,6 +924,15 @@ function renderOperatorView() {
     `,
     payments: `
       <section class="panel">
+        <div class="section-head">
+          <div><p class="eyebrow">Customer Payment Requests</p><h2>Pending Approval Queue</h2></div>
+          <div class="toolbar">
+            <button type="button" id="copyCustomerPaymentLink" class="ghost-btn">Copy Customer Payment Link</button>
+          </div>
+        </div>
+        ${tableWrapper(renderPaymentRequestTable(data.paymentRequests))}
+      </section>
+      <section class="panel">
         <div class="section-head"><div><p class="eyebrow">Payments</p><h2>Collect Payment</h2></div></div>
         <form id="paymentForm" class="form-grid two-col-grid">
           <label>Customer
@@ -939,6 +1128,10 @@ function renderOperatorView() {
           <label>Billing Day<input name="billingDay" type="number" value="${data.settings?.billingDay || 1}" /></label>
           <label>Late Fee<input name="lateFee" type="number" value="${data.settings?.lateFee || 0}" /></label>
           <label>Address<input name="address" value="${data.settings?.address || ""}" /></label>
+          <label>Payment Display Name<input name="paymentDisplayName" value="${data.settings?.paymentDisplayName || ""}" /></label>
+          <label>UPI ID<input name="upiId" value="${data.settings?.upiId || ""}" placeholder="example@upi" /></label>
+          <label>QR Image URL<input name="qrImageUrl" value="${data.settings?.qrImageUrl || ""}" placeholder="https://.../operator-qr.png" /></label>
+          <label>QR Instructions<input name="qrInstructions" value="${data.settings?.qrInstructions || ""}" placeholder="Payment karne ke baad UTR submit karein" /></label>
           <label>ACS Username<input name="acsUsername" value="${data.settings?.acsUsername || ""}" /></label>
           <label>ACS Password<input name="acsPassword" value="${data.settings?.acsPassword || ""}" /></label>
           <label>Default ACS Profile
@@ -959,6 +1152,10 @@ function renderOperatorView() {
           </label>
           <div class="form-actions"><button class="primary-btn" type="submit">Save Settings</button></div>
         </form>
+        <div class="inline-form-block">
+          <p class="eyebrow">Customer Payment Link</p>
+          <p class="subtle-note">${escapeHtml(`${window.location.origin}${window.location.pathname}#customer-pay`)}</p>
+        </div>
       </section>
     `,
   };
@@ -1006,6 +1203,41 @@ function renderPaymentCards(items) {
       `,
     )
     .join("");
+}
+
+function renderPaymentRequestTable(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi koi pending customer payment request nahi hai.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Customer</th><th>Amount</th><th>UTR</th><th>Paid At</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${escapeHtml(item.customerName)}<br /><span class="subtle-note">${escapeHtml(item.customerMobile)}</span></td>
+                <td>${formatMoney(item.amount)}</td>
+                <td>${escapeHtml(item.utrNumber || "-")}</td>
+                <td>${formatDate(item.paidAt || item.createdAt)}</td>
+                <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
+                <td>
+                  ${item.status === "pending"
+                    ? `
+                      <button class="ghost-btn action-btn" data-action="approve-payment-request" data-id="${item.id}">Approve</button>
+                      <button class="ghost-btn action-btn" data-action="reject-payment-request" data-id="${item.id}">Reject</button>
+                    `
+                    : "-"}
+                </td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function renderRechargeCards(items) {
@@ -1332,10 +1564,17 @@ function renderOperatorsAdminList(items) {
 async function loadAdminOperatorDetail(operatorId) {
   const response = await fetchJson(`/operators/${operatorId}`);
   state.adminSelectedOperatorId = operatorId;
+  state.adminFormMode = "edit";
   state.data.selectedOperator = response.item;
   state.data.selectedOperatorSettings = response.settings;
   state.data.selectedOperatorMetrics = response.metrics;
   state.data.selectedOperatorAdmins = response.adminUsers || [];
+
+  const formPanel = document.getElementById("adminFormPanel");
+  if (formPanel) {
+    formPanel.innerHTML = renderAdminFormPanel();
+    attachAdminFormEvents();
+  }
 
   const detail = document.getElementById("adminOperatorDetail");
   if (detail) {
@@ -1466,6 +1705,23 @@ async function handleOperatorAction(action, id) {
     } catch (_error) {
       showStatus("Package assigned hai, pehle customers reassign karo.", "error");
     }
+    return;
+  }
+
+  if (action === "approve-payment-request") {
+    await fetchJson(`/payments/requests/${id}/approve`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Customer payment approved and posted.");
+    return;
+  }
+
+  if (action === "reject-payment-request") {
+    if (!window.confirm("Reject this customer payment request?")) return;
+    await fetchJson(`/payments/requests/${id}/reject`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Customer payment request rejected.");
   }
 }
 
@@ -1631,6 +1887,21 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const copyCustomerPaymentLink = document.getElementById("copyCustomerPaymentLink");
+  if (copyCustomerPaymentLink) {
+    copyCustomerPaymentLink.addEventListener("click", async () => {
+      const session = getSession();
+      const paymentLink = `${window.location.origin}${window.location.pathname}#customer-pay`;
+      const shareText = `${paymentLink}\nOperator Code: ${session?.tenant?.code || ""}`;
+      try {
+        await navigator.clipboard.writeText(shareText);
+        showStatus("Customer payment link copied.");
+      } catch {
+        showStatus(`Customer payment link: ${shareText}`);
+      }
+    });
+  }
+
   const rechargeForm = document.getElementById("rechargeForm");
   if (rechargeForm) {
     rechargeForm.addEventListener("submit", async (event) => {
@@ -1741,6 +2012,19 @@ function attachOperatorSectionEvents() {
 }
 
 function attachAdminDetailEvents() {
+  const editBtn = document.getElementById("editOperatorInFormBtn");
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      state.adminFormMode = "edit";
+      const formPanel = document.getElementById("adminFormPanel");
+      if (formPanel) {
+        formPanel.innerHTML = renderAdminFormPanel();
+        attachAdminFormEvents();
+      }
+      showStatus("Selected account loaded in edit form.");
+    });
+  }
+
   const operatorManageForm = document.getElementById("operatorManageForm");
   if (operatorManageForm) {
     operatorManageForm.addEventListener("submit", async (event) => {
@@ -1834,12 +2118,13 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings] =
+  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
       fetchJson("/packages"),
       fetchJson("/payments"),
+      fetchJson("/payments/requests"),
       fetchJson("/recharges"),
       fetchJson("/reports"),
       fetchJson("/staff"),
@@ -1855,6 +2140,7 @@ async function loadOperatorData() {
   state.data.customers = customers.items;
   state.data.packages = packages.items;
   state.data.payments = payments.items;
+  state.data.paymentRequests = paymentRequests.items;
   state.data.recharges = recharges.items;
   state.data.reports = reports.items;
   state.data.staff = staff.items;
@@ -1881,11 +2167,34 @@ async function hydrateDashboard() {
 }
 
 if (getSession()?.token) {
-  renderAppShell();
-  hydrateDashboard().catch(() => {
-    clearSession();
-    renderLogin("Session invalid. Please log in again.");
-  });
+  if (isCustomerPortalMode()) {
+    renderPublicCustomerPaymentPortal();
+  } else {
+    renderAppShell();
+    hydrateDashboard().catch(() => {
+      clearSession();
+      renderLogin("Session invalid. Please log in again.");
+    });
+  }
 } else {
-  renderLogin();
+  if (isCustomerPortalMode()) renderPublicCustomerPaymentPortal();
+  else renderLogin();
 }
+
+window.addEventListener("hashchange", () => {
+  if (isCustomerPortalMode()) {
+    renderPublicCustomerPaymentPortal();
+    return;
+  }
+
+  const session = getSession();
+  if (session?.token) {
+    renderAppShell();
+    hydrateDashboard().catch(() => {
+      clearSession();
+      renderLogin("Session invalid. Please log in again.");
+    });
+  } else {
+    renderLogin();
+  }
+});

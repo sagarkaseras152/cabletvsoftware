@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { createReceiptNumber } from "../lib/receipt.js";
 import { requireAuth } from "../middleware/auth.js";
+import { applyCustomerPayment } from "../services/paymentService.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -14,50 +14,94 @@ router.get("/", async (req, res) => {
   res.json({ ok: true, totalAmount: items.reduce((sum, item) => sum + item.amountPaid, 0), items });
 });
 
+router.get("/requests", async (req, res) => {
+  const items = await prisma.paymentRequest.findMany({
+    where: { tenantId: req.context.tenantId },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({ ok: true, items });
+});
+
 router.post("/collect", async (req, res) => {
   const { customerId, amountPaid, paymentMode = "cash" } = req.body || {};
-  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-  if (!customer) return res.status(404).json({ ok: false, message: "Customer not found" });
-
-  const paidAmount = Number(amountPaid || customer.dueAmount || 0);
-
-  const item = await prisma.payment.create({
-    data: {
-      id: `pay-${Date.now()}`,
+  try {
+    const result = await applyCustomerPayment({
       tenantId: req.context.tenantId,
-      customerId: customer.id,
-      receiptNumber: createReceiptNumber(),
-      customerName: customer.name,
-      amountPaid: paidAmount,
+      customerId,
+      amountPaid,
       paymentMode,
       paymentDate: new Date().toISOString(),
-      status: "success",
-    },
+    });
+
+    res.status(201).json({
+      ok: true,
+      message: "Payment collected",
+      item: result.item,
+      customer: result.customer,
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error?.message || "Payment failed" });
+  }
+});
+
+router.post("/requests/:id/approve", async (req, res) => {
+  const requestItem = await prisma.paymentRequest.findFirst({
+    where: { id: req.params.id, tenantId: req.context.tenantId },
   });
+  if (!requestItem) return res.status(404).json({ ok: false, message: "Payment request not found" });
+  if (requestItem.status !== "pending") {
+    return res.status(400).json({ ok: false, message: "This payment request is already reviewed" });
+  }
 
-  const remainingDue = Math.max(0, Number(customer.dueAmount || 0) - paidAmount);
-  const nextDueDate = customer.dueDate || new Date().toISOString().slice(0, 10);
+  try {
+    const result = await applyCustomerPayment({
+      tenantId: req.context.tenantId,
+      customerId: requestItem.customerId,
+      amountPaid: requestItem.amount,
+      paymentMode: requestItem.paymentMode || "upi_qr",
+      paymentDate: requestItem.paidAt || new Date().toISOString(),
+    });
 
-  await prisma.customer.update({
-    where: { id: customer.id },
+    const updatedRequest = await prisma.paymentRequest.update({
+      where: { id: requestItem.id },
+      data: {
+        status: "approved",
+        reviewedBy: req.context.userId,
+        reviewedAt: new Date(),
+        linkedPaymentId: result.item.id,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      message: "Payment approved and posted successfully",
+      item: updatedRequest,
+      payment: result.item,
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error?.message || "Approval failed" });
+  }
+});
+
+router.post("/requests/:id/reject", async (req, res) => {
+  const requestItem = await prisma.paymentRequest.findFirst({
+    where: { id: req.params.id, tenantId: req.context.tenantId },
+  });
+  if (!requestItem) return res.status(404).json({ ok: false, message: "Payment request not found" });
+  if (requestItem.status !== "pending") {
+    return res.status(400).json({ ok: false, message: "This payment request is already reviewed" });
+  }
+
+  const updated = await prisma.paymentRequest.update({
+    where: { id: requestItem.id },
     data: {
-      dueAmount: remainingDue,
-      status: remainingDue > 0 ? customer.status : "active",
-      dueDate: nextDueDate,
+      status: "rejected",
+      reviewedBy: req.context.userId,
+      reviewedAt: new Date(),
     },
   });
 
-  await prisma.tenant.update({
-    where: { id: req.context.tenantId },
-    data: { monthlyCollection: { increment: item.amountPaid } },
-  });
-
-  res.status(201).json({
-    ok: true,
-    message: "Payment collected",
-    item,
-    customer: { ...customer, dueAmount: remainingDue, dueDate: nextDueDate },
-  });
+  res.json({ ok: true, message: "Payment request rejected", item: updated });
 });
 
 export default router;
