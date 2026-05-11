@@ -315,8 +315,8 @@ export const featureChecklist = {
 export const authProfiles = [
   {
     id: "user-platform-1",
-    email: "owner@cableops.in",
-    password: "admin123",
+    email: "quickmedigo@gmail.com",
+    password: "Sagar@9090$",
     role: "platform_owner",
     tenantId: null,
     name: "Platform Owner",

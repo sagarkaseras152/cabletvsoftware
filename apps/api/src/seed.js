@@ -11,7 +11,7 @@ async function upsertTenant(data) {
 
 async function upsertUser(data) {
   return prisma.user.upsert({
-    where: { email: data.email },
+    where: { id: data.id },
     update: data,
     create: data,
   });
@@ -52,9 +52,9 @@ export async function seedDatabase() {
     id: "user-platform-1",
     tenantId: null,
     name: "Platform Owner",
-    email: "owner@cableops.in",
+    email: "quickmedigo@gmail.com",
     mobile: "9000000000",
-    passwordHash: await bcrypt.hash("admin123", 10),
+    passwordHash: await bcrypt.hash("Sagar@9090$", 10),
     role: "platform_owner",
     isActive: true,
   });
