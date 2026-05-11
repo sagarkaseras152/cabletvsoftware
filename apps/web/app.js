@@ -289,6 +289,7 @@ function renderAdminShell(user) {
   attachCommonEvents();
   document.getElementById("operatorCreateForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const formData = new FormData(event.currentTarget);
     try {
       const response = await fetchJson("/operators", {
@@ -304,7 +305,7 @@ function renderAdminShell(user) {
         }),
       });
       showStatus("Business account created successfully.");
-      event.currentTarget.reset();
+      form.reset();
       await hydrateDashboard();
     } catch (error) {
       showStatus(parseErrorMessage(error, "Account create nahi hua."), "error");
