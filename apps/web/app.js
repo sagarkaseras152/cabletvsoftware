@@ -43,6 +43,7 @@ const state = {
     olts: [],
     onts: [],
     acsTasks: [],
+    acsEvents: [],
     settings: null,
   },
 };
@@ -105,14 +106,32 @@ function normalizeDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function getAcsEndpoint() {
+  const session = getSession();
+  const tenantCode = session?.tenant?.code || "TENANT";
+  return `${apiBase.replace(/\/api$/, "")}/api/acs/cwmp/${tenantCode}`;
+}
+
 function badgeClass(status) {
   const map = {
     active: "active",
     success: "success",
     trial: "trial",
+    approved: "success",
+    completed: "success",
+    online: "success",
+    queued: "warning",
+    dispatched: "warning",
+    new_discovered: "warning",
+    received: "warning",
     partial: "warning",
     suspended: "suspended",
     activation_pending: "warning",
+    failed: "danger",
+    fault: "danger",
+    rejected: "danger",
+    device_not_tr069_ready: "danger",
+    offline: "danger",
   };
   return map[status] || "warning";
 }
@@ -552,7 +571,7 @@ function renderOperatorView() {
     `,
     network: `
       <section class="panel">
-        <div class="feedback success">ACS endpoint: <strong>${apiBase.replace(/\/api$/, "")}/api/acs/cwmp</strong></div>
+        <div class="feedback success">ACS endpoint: <strong>${getAcsEndpoint()}</strong></div>
         <div class="section-head"><div><p class="eyebrow">Network Core</p><h2>OLT Management</h2></div></div>
         <form id="oltForm" class="form-grid two-col-grid">
           <label>OLT Name<input name="name" required /></label>
@@ -635,16 +654,38 @@ function renderOperatorView() {
         </form>
         ${tableWrapper(renderAcsTaskTable(data.acsTasks, data.onts))}
       </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Diagnostics</p><h2>ACS Event Log</h2></div></div>
+        ${tableWrapper(renderAcsEventTable(data.acsEvents, data.onts))}
+      </section>
     `,
     settings: `
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand and Billing Settings</h2></div></div>
+        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing and ACS Settings</h2></div></div>
         <form id="settingsForm" class="form-grid two-col-grid">
           <label>Firm Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
           <label>Support Mobile<input name="supportMobile" value="${data.settings?.supportMobile || ""}" /></label>
           <label>Billing Day<input name="billingDay" type="number" value="${data.settings?.billingDay || 1}" /></label>
           <label>Late Fee<input name="lateFee" type="number" value="${data.settings?.lateFee || 0}" /></label>
           <label>Address<input name="address" value="${data.settings?.address || ""}" /></label>
+          <label>ACS Username<input name="acsUsername" value="${data.settings?.acsUsername || ""}" /></label>
+          <label>ACS Password<input name="acsPassword" value="${data.settings?.acsPassword || ""}" /></label>
+          <label>Default ACS Profile
+            <select name="defaultAcsProfile">
+              <option value="tr181" ${data.settings?.defaultAcsProfile === "tr181" ? "selected" : ""}>TR-181</option>
+              <option value="tr098" ${data.settings?.defaultAcsProfile === "tr098" ? "selected" : ""}>TR-098</option>
+            </select>
+          </label>
+          <label>Default Inform Interval<input name="defaultInformInterval" type="number" value="${data.settings?.defaultInformInterval || 300}" /></label>
+          <label>Default SSID Path<input name="defaultWifiSsidPath" value="${data.settings?.defaultWifiSsidPath || ""}" /></label>
+          <label>Default Password Path<input name="defaultWifiPasswordPath" value="${data.settings?.defaultWifiPasswordPath || ""}" /></label>
+          <label>TR-069 Template Name<input name="tr069TemplateName" value="${data.settings?.tr069TemplateName || ""}" /></label>
+          <label>Auto Approve Discovered ONTs
+            <select name="autoApproveOnts">
+              <option value="true" ${data.settings?.autoApproveOnts !== false ? "selected" : ""}>Yes</option>
+              <option value="false" ${data.settings?.autoApproveOnts === false ? "selected" : ""}>No</option>
+            </select>
+          </label>
           <div class="form-actions"><button class="primary-btn" type="submit">Save Settings</button></div>
         </form>
       </section>
@@ -922,7 +963,7 @@ function renderOntTable(onts, olts, customers) {
   const customerMap = Object.fromEntries(customers.map((item) => [item.id, item]));
   return `
     <table>
-      <thead><tr><th>Serial</th><th>Vendor</th><th>OLT</th><th>Customer</th><th>PON</th><th>TR-069</th><th>WiFi</th><th>Status</th></tr></thead>
+      <thead><tr><th>Serial</th><th>Vendor</th><th>OLT</th><th>Customer</th><th>PON</th><th>Discovery</th><th>TR-069</th><th>WiFi</th><th>Informs</th><th>Status</th></tr></thead>
       <tbody>
         ${onts
           .map(
@@ -933,8 +974,10 @@ function renderOntTable(onts, olts, customers) {
                 <td>${oltMap[item.oltId]?.name || "-"}</td>
                 <td>${customerMap[item.customerId]?.name || "-"}</td>
                 <td>${item.ponPort || "-"}</td>
+                <td><span class="badge ${item.discoveryStatus === "approved" ? "success" : "warning"}">${item.discoveryStatus || "-"}</span></td>
                 <td><span class="badge ${item.tr069Enabled ? "success" : "warning"}">${item.tr069Enabled ? "ready" : "pending"}</span></td>
                 <td>${item.wifiSsid || "-"}</td>
+                <td>${item.informCount || 0}</td>
                 <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
               </tr>
             `,
@@ -949,7 +992,7 @@ function renderAcsTaskTable(items, onts) {
   const ontMap = Object.fromEntries(onts.map((item) => [item.id, item]));
   return `
     <table>
-      <thead><tr><th>Task</th><th>Device</th><th>Status</th><th>Details</th><th>Created</th></tr></thead>
+      <thead><tr><th>Task</th><th>Device</th><th>Status</th><th>Retries</th><th>Details</th><th>Created</th></tr></thead>
       <tbody>
         ${items
           .map(
@@ -958,7 +1001,32 @@ function renderAcsTaskTable(items, onts) {
                 <td>${item.taskType}</td>
                 <td>${ontMap[item.ontId]?.serialNumber || "-"}</td>
                 <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
+                <td>${item.retryCount || 0}</td>
                 <td>${item.resultMessage || "-"}</td>
+                <td>${formatDate(item.createdAt)}</td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderAcsEventTable(items, onts) {
+  const ontMap = Object.fromEntries(onts.map((item) => [item.id, item]));
+  return `
+    <table>
+      <thead><tr><th>Event</th><th>Device</th><th>Status</th><th>Details</th><th>Time</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.eventType}</td>
+                <td>${ontMap[item.ontId]?.serialNumber || item.serialNumber || "-"}</td>
+                <td><span class="badge ${badgeClass(item.status)}">${item.status || "-"}</span></td>
+                <td>${item.details || "-"}</td>
                 <td>${formatDate(item.createdAt)}</td>
               </tr>
             `,
@@ -1325,7 +1393,7 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, recharges, reports, staff, expenses, olts, onts, acsTasks, settings] =
+  const [operators, customers, packages, payments, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
@@ -1338,6 +1406,7 @@ async function loadOperatorData() {
       fetchJson("/olts"),
       fetchJson("/onts"),
       fetchJson("/acs/tasks"),
+      fetchJson("/acs/events"),
       fetchJson("/settings"),
     ]);
 
@@ -1352,6 +1421,7 @@ async function loadOperatorData() {
   state.data.olts = olts.items;
   state.data.onts = onts.items;
   state.data.acsTasks = acsTasks.items;
+  state.data.acsEvents = acsEvents.items;
   state.data.settings = settings.item;
   updateWorkspaceBrand();
 }

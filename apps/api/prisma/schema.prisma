@@ -141,6 +141,14 @@ model TenantSetting {
   lateFee        Float   @default(0)
   supportMobile  String?
   address        String?
+  acsUsername    String?
+  acsPassword    String?
+  defaultAcsProfile String? @default("tr181")
+  defaultWifiSsidPath String?
+  defaultWifiPasswordPath String?
+  defaultInformInterval Int? @default(300)
+  autoApproveOnts Boolean @default(true)
+  tr069TemplateName String?
 }
 
 model Olt {
@@ -193,6 +201,10 @@ model Ont {
   pppoeUsername          String?
   pppoePassword          String?
   status                 String   @default("offline")
+  discoveryStatus        String   @default("approved")
+  informCount            Int      @default(0)
+  lastFaultCode          String?
+  lastFaultMessage       String?
   lastInformAt           DateTime?
   lastProvisionedAt      DateTime?
   createdAt              DateTime @default(now())
@@ -211,10 +223,26 @@ model AcsTask {
   taskType        String
   commandKey      String?
   status          String   @default("queued")
+  retryCount      Int      @default(0)
+  nextRetryAt     DateTime?
+  faultCode       String?
   requestedBy     String?
   payload         String?
   resultMessage   String?
   executedAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model AcsEvent {
+  id            String   @id
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  ontId         String?
+  eventType     String
+  serialNumber  String?
+  payload       String?
+  status        String?
+  details       String?
+  createdAt     DateTime @default(now())
 }
