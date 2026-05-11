@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 
 const router = Router();
+const customerPortalDefaultPassword = "123456";
 
 async function buildCustomerPortalPayload(customerId) {
   const customer = await prisma.customer.findFirst({
@@ -69,11 +70,14 @@ router.get("/customer-portal/:customerId", async (req, res) => {
   res.json({ ok: true, ...payload });
 });
 
-router.post("/payment-lookup", async (req, res) => {
-  const { customerId = "", customerRef = "" } = req.body || {};
-  const portalId = String(customerId || customerRef || "").trim();
+router.post("/customer-login", async (req, res) => {
+  const { customerId = "", password = "" } = req.body || {};
+  const portalId = String(customerId || "").trim();
   if (!portalId) {
     return res.status(400).json({ ok: false, message: "customerId is required" });
+  }
+  if (String(password || "") !== customerPortalDefaultPassword) {
+    return res.status(401).json({ ok: false, message: "Invalid portal password" });
   }
 
   const payload = await buildCustomerPortalPayload(portalId);

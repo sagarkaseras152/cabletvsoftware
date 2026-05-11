@@ -33,8 +33,8 @@ const state = {
   customerImportMode: "skip_duplicates",
   statusTimer: null,
   publicPayment: {
-    operatorCode: "",
     customerRef: "",
+    password: "123456",
     lookup: null,
   },
   dashboardFilters: {
@@ -419,7 +419,8 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
           ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
           <form id="publicPaymentLookupForm" class="form-grid">
             <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
-            <button class="primary-btn" type="submit">Open Customer Portal</button>
+            <label>Password<input name="password" type="password" value="${escapeHtml(state.publicPayment.password || "123456")}" placeholder="Default password" required /></label>
+            <button class="primary-btn" type="submit">Login to Customer Portal</button>
           </form>
           ${lookup ? `
             <div class="inline-form-block public-payment-card">
@@ -483,11 +484,13 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     state.publicPayment.customerRef = String(formData.get("customerId") || "").trim();
+    state.publicPayment.password = String(formData.get("password") || "").trim();
     try {
-      const response = await fetchJson("/public/payment-lookup", {
+      const response = await fetchJson("/public/customer-login", {
         method: "POST",
         body: JSON.stringify({
           customerId: state.publicPayment.customerRef,
+          password: state.publicPayment.password,
         }),
       });
       state.publicPayment.lookup = response;
@@ -520,6 +523,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
   document.getElementById("backToLoginBtn").addEventListener("click", () => {
     state.publicPayment.lookup = null;
     state.publicPayment.customerRef = "";
+    state.publicPayment.password = "123456";
     window.location.hash = "";
     renderLogin();
   });
@@ -1726,7 +1730,7 @@ async function handleOperatorAction(action, id) {
     const customer = state.data.customers.find((item) => item.id === id);
     if (!customer) return;
     const portalLink = `${window.location.origin}${window.location.pathname}#customer-pay/${encodeURIComponent(customer.customerCode)}`;
-    const shareText = `${portalLink}\nCustomer Portal ID: ${customer.customerCode}`;
+    const shareText = `${portalLink}\nCustomer Portal ID: ${customer.customerCode}\nDefault Password: 123456`;
     try {
       await navigator.clipboard.writeText(shareText);
       showStatus("Customer portal link copied.");

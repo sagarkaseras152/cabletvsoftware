@@ -38,8 +38,7 @@ async function adjustPackageCounts(previousPackageId, nextPackageId) {
 
 async function generateCustomerCode(tenantId) {
   const count = await prisma.customer.count({ where: { tenantId } });
-  const suffix = String(Date.now()).slice(-4);
-  return `CUS-${count + 1}-${suffix}`;
+  return String(100000 + count + 1);
 }
 
 async function buildImportPreview(tenantId, rows = []) {
