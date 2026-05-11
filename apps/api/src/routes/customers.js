@@ -36,6 +36,12 @@ async function adjustPackageCounts(previousPackageId, nextPackageId) {
   }
 }
 
+async function generateCustomerCode(tenantId) {
+  const count = await prisma.customer.count({ where: { tenantId } });
+  const suffix = String(Date.now()).slice(-4);
+  return `CUS-${count + 1}-${suffix}`;
+}
+
 async function buildImportPreview(tenantId, rows = []) {
   const existingCustomers = await prisma.customer.findMany({
     where: { tenantId },
@@ -163,7 +169,6 @@ router.post("/", async (req, res) => {
   } = req.body || {};
   if (!name || !mobile) return res.status(400).json({ ok: false, message: "name and mobile are required" });
 
-  const count = await prisma.customer.count({ where: { tenantId: req.context.tenantId } });
   let resolvedPackageName = packageName;
   if (packageId) {
     const selectedPackage = await prisma.package.findFirst({
@@ -181,7 +186,7 @@ router.post("/", async (req, res) => {
     data: {
       id: `cust-${Date.now()}`,
       tenantId: req.context.tenantId,
-      customerCode: `CUS-${count + 1}`,
+      customerCode: await generateCustomerCode(req.context.tenantId),
       name,
       mobile,
       area,
@@ -257,12 +262,11 @@ router.post("/import", async (req, res) => {
     };
 
     if (!existing) {
-      const count = await prisma.customer.count({ where: { tenantId: req.context.tenantId } });
       await prisma.customer.create({
         data: {
           id: `cust-${Date.now()}-${index}`,
           tenantId: req.context.tenantId,
-          customerCode: String(row.customerCode || "").trim() || `CUS-${count + 1}`,
+          customerCode: String(row.customerCode || "").trim() || await generateCustomerCode(req.context.tenantId),
           ...payload,
           status: "active",
         },

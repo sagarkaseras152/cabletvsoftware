@@ -410,7 +410,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
           <p class="eyebrow">Customer Payment</p>
           <h1>Pay your operator using the assigned QR.</h1>
           <p class="lede">
-            Operator ka code aur apna mobile ya customer code dalo. Aapko wahi operator ka QR aur payment confirmation form dikhega.
+            Apna unique Customer Portal ID dalo. Iske baad aapko apni details, package, due amount aur payment confirmation screen milegi.
           </p>
         </section>
         <section class="auth-form">
@@ -435,7 +435,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
               ${lookup.operator.qrImageUrl ? `<img class="qr-preview" src="${escapeHtml(lookup.operator.qrImageUrl)}" alt="Operator QR" />` : `<div class="empty-state">QR image abhi set nahi hai. UPI ID: <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong></div>`}
               <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
               <form id="publicPaymentSubmitForm" class="form-grid">
-                <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.id)}" />
+                <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.portalId)}" />
                 <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
                 <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
                 <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
@@ -491,7 +491,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
         }),
       });
       state.publicPayment.lookup = response;
-      window.location.hash = `#customer-pay/${encodeURIComponent(response.customer.id)}`;
+      window.location.hash = `#customer-pay/${encodeURIComponent(response.customer.portalId)}`;
       renderPublicCustomerPaymentPortal();
     } catch (error) {
       renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Customer lookup fail ho gaya."), "error");
@@ -508,7 +508,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
           method: "POST",
           body: JSON.stringify(Object.fromEntries(formData.entries())),
         });
-        const fresh = await fetchJson(`/public/customer-portal/${lookup.customer.id}`);
+        const fresh = await fetchJson(`/public/customer-portal/${lookup.customer.portalId}`);
         state.publicPayment.lookup = fresh;
         renderPublicCustomerPaymentPortal("Payment request submit ho gaya. Operator approval ke baad software me auto entry ho jayegi.", "success");
       } catch (error) {
@@ -1413,7 +1413,7 @@ function renderCustomerTable(items) {
               <tr>
                 <td>${item.name}</td>
                 <td>${item.mobile}</td>
-                <td>${item.id}</td>
+                <td>${item.customerCode}</td>
                 <td>${item.area || "-"}</td>
                 <td>${item.packageName || "-"}</td>
                 <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
@@ -1725,8 +1725,8 @@ async function handleOperatorAction(action, id) {
   if (action === "copy-customer-portal") {
     const customer = state.data.customers.find((item) => item.id === id);
     if (!customer) return;
-    const portalLink = `${window.location.origin}${window.location.pathname}#customer-pay/${encodeURIComponent(customer.id)}`;
-    const shareText = `${portalLink}\nCustomer Portal ID: ${customer.id}`;
+    const portalLink = `${window.location.origin}${window.location.pathname}#customer-pay/${encodeURIComponent(customer.customerCode)}`;
+    const shareText = `${portalLink}\nCustomer Portal ID: ${customer.customerCode}`;
     try {
       await navigator.clipboard.writeText(shareText);
       showStatus("Customer portal link copied.");

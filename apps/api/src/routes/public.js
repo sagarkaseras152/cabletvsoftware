@@ -5,7 +5,12 @@ const router = Router();
 
 async function buildCustomerPortalPayload(customerId) {
   const customer = await prisma.customer.findFirst({
-    where: { id: customerId },
+    where: {
+      OR: [
+        { customerCode: customerId },
+        { id: customerId },
+      ],
+    },
   });
   if (!customer) return null;
 
@@ -40,7 +45,7 @@ async function buildCustomerPortalPayload(customerId) {
     },
     customer: {
       id: customer.id,
-      portalId: customer.id,
+      portalId: customer.customerCode,
       customerCode: customer.customerCode,
       name: customer.name,
       mobile: customer.mobile,
@@ -87,7 +92,14 @@ router.post("/payment-request", async (req, res) => {
     return res.status(400).json({ ok: false, message: "customerId and amount are required" });
   }
 
-  const customer = await prisma.customer.findFirst({ where: { id: normalizedCustomerId } });
+  const customer = await prisma.customer.findFirst({
+    where: {
+      OR: [
+        { customerCode: normalizedCustomerId },
+        { id: normalizedCustomerId },
+      ],
+    },
+  });
   if (!customer) return res.status(404).json({ ok: false, message: "Customer portal not found" });
 
   if (normalizedUtr) {
