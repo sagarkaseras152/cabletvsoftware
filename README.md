@@ -78,9 +78,8 @@ Because most operators already use different billing systems, recharge should su
 
 The platform should treat recharge as an internal bill-extension event and maintain an external reconciliation status for operators that still update their legacy software separately.
 
-## Render production rule
+## Current database mode
 
-- Render free web services use an ephemeral filesystem.
-- Never use SQLite `file:./dev.db` on Render for live operator data.
-- Always use Render Postgres and set `DATABASE_URL` to the Postgres internal connection string.
-- The API now blocks startup on Render if `DATABASE_URL` still points to a local SQLite file, so silent data loss does not happen again.
+- The current setup uses SQLite with `DATABASE_URL=file:./dev.db`.
+- This keeps the app simple and close to the original setup.
+- For Render free deployments, remember that local SQLite files can still be reset on redeploy because the filesystem is ephemeral.
