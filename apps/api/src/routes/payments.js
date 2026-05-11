@@ -19,6 +19,8 @@ router.post("/collect", async (req, res) => {
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) return res.status(404).json({ ok: false, message: "Customer not found" });
 
+  const paidAmount = Number(amountPaid || customer.dueAmount || 0);
+
   const item = await prisma.payment.create({
     data: {
       id: `pay-${Date.now()}`,
@@ -26,10 +28,22 @@ router.post("/collect", async (req, res) => {
       customerId: customer.id,
       receiptNumber: createReceiptNumber(),
       customerName: customer.name,
-      amountPaid: Number(amountPaid || customer.dueAmount || 0),
+      amountPaid: paidAmount,
       paymentMode,
       paymentDate: new Date().toISOString(),
       status: "success",
+    },
+  });
+
+  const remainingDue = Math.max(0, Number(customer.dueAmount || 0) - paidAmount);
+  const nextDueDate = customer.dueDate || new Date().toISOString().slice(0, 10);
+
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: {
+      dueAmount: remainingDue,
+      status: remainingDue > 0 ? customer.status : "active",
+      dueDate: nextDueDate,
     },
   });
 
@@ -38,7 +52,12 @@ router.post("/collect", async (req, res) => {
     data: { monthlyCollection: { increment: item.amountPaid } },
   });
 
-  res.status(201).json({ ok: true, message: "Payment collected", item });
+  res.status(201).json({
+    ok: true,
+    message: "Payment collected",
+    item,
+    customer: { ...customer, dueAmount: remainingDue, dueDate: nextDueDate },
+  });
 });
 
 export default router;

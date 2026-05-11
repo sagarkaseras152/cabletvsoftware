@@ -355,7 +355,12 @@ function renderOperatorView() {
           <label>Name<input name="name" required /></label>
           <label>Mobile<input name="mobile" required /></label>
           <label>Area<input name="area" /></label>
-          <label>Package Name<input name="packageName" /></label>
+          <label>Package
+            <select name="packageId">
+              <option value="">No package</option>
+              ${renderPackageOptions(data.packages)}
+            </select>
+          </label>
           <label>Due Amount<input name="dueAmount" type="number" /></label>
           <label>Due Date<input name="dueDate" type="date" /></label>
           <label>Connection Type
@@ -516,10 +521,14 @@ function renderCustomerOptions(items) {
   return items.map((item) => `<option value="${item.id}">${item.name} | ${item.mobile}</option>`).join("");
 }
 
+function renderPackageOptions(items) {
+  return items.map((item) => `<option value="${item.id}">${item.name} | ${formatMoney(item.price)}</option>`).join("");
+}
+
 function renderCustomerTable(items) {
   return `
     <table>
-      <thead><tr><th>Name</th><th>Mobile</th><th>Area</th><th>Package</th><th>Status</th><th>Due</th></tr></thead>
+      <thead><tr><th>Name</th><th>Mobile</th><th>Area</th><th>Package</th><th>Status</th><th>Due</th><th>Actions</th></tr></thead>
       <tbody>
         ${items
           .map(
@@ -531,6 +540,11 @@ function renderCustomerTable(items) {
                 <td>${item.packageName || "-"}</td>
                 <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
                 <td>${formatMoney(item.dueAmount)}</td>
+                <td>
+                  <button class="ghost-btn action-btn" data-action="edit-customer" data-id="${item.id}">Edit</button>
+                  <button class="ghost-btn action-btn" data-action="assign-package" data-id="${item.id}">Assign</button>
+                  <button class="ghost-btn action-btn" data-action="delete-customer" data-id="${item.id}">Delete</button>
+                </td>
               </tr>
             `,
           )
@@ -543,7 +557,7 @@ function renderCustomerTable(items) {
 function renderPackageTable(items) {
   return `
     <table>
-      <thead><tr><th>Name</th><th>Type</th><th>Price</th><th>Validity</th><th>Customers</th></tr></thead>
+      <thead><tr><th>Name</th><th>Type</th><th>Price</th><th>Validity</th><th>Customers</th><th>Actions</th></tr></thead>
       <tbody>
         ${items
           .map(
@@ -554,6 +568,10 @@ function renderPackageTable(items) {
                 <td>${formatMoney(item.price)}</td>
                 <td>${item.validityDays} days</td>
                 <td>${item.customers || 0}</td>
+                <td>
+                  <button class="ghost-btn action-btn" data-action="edit-package" data-id="${item.id}">Edit</button>
+                  <button class="ghost-btn action-btn" data-action="delete-package" data-id="${item.id}">Delete</button>
+                </td>
               </tr>
             `,
           )
@@ -768,6 +786,86 @@ function attachOperatorSectionEvents() {
       showStatus("Settings saved.");
     });
   }
+
+  document.querySelectorAll("[data-action='edit-customer']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const customer = state.data.customers.find((item) => item.id === button.dataset.id);
+      if (!customer) return;
+      const name = window.prompt("Customer name", customer.name);
+      const mobile = window.prompt("Mobile", customer.mobile);
+      const area = window.prompt("Area", customer.area || "");
+      const dueAmount = window.prompt("Due amount", customer.dueAmount);
+      if (!name || !mobile) return;
+      await fetchJson(`/customers/${customer.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, mobile, area, dueAmount: Number(dueAmount || 0) }),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Customer updated.");
+    });
+  });
+
+  document.querySelectorAll("[data-action='assign-package']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const customer = state.data.customers.find((item) => item.id === button.dataset.id);
+      if (!customer) return;
+      const packageId = window.prompt(
+        `Package ID enter karo:\n${state.data.packages.map((pkg) => `${pkg.id} = ${pkg.name}`).join("\n")}`,
+        customer.packageId || "",
+      );
+      if (!packageId) return;
+      await fetchJson(`/customers/${customer.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ packageId }),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Package assigned to customer.");
+    });
+  });
+
+  document.querySelectorAll("[data-action='delete-customer']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!window.confirm("Delete this customer?")) return;
+      await fetchJson(`/customers/${button.dataset.id}`, { method: "DELETE" });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Customer deleted.");
+    });
+  });
+
+  document.querySelectorAll("[data-action='edit-package']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = state.data.packages.find((pkg) => pkg.id === button.dataset.id);
+      if (!item) return;
+      const name = window.prompt("Package name", item.name);
+      const price = window.prompt("Price", item.price);
+      const validityDays = window.prompt("Validity days", item.validityDays);
+      if (!name || !price) return;
+      await fetchJson(`/packages/${item.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, price: Number(price), validityDays: Number(validityDays || 30) }),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Package updated.");
+    });
+  });
+
+  document.querySelectorAll("[data-action='delete-package']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!window.confirm("Delete this package?")) return;
+      try {
+        await fetchJson(`/packages/${button.dataset.id}`, { method: "DELETE" });
+        await loadOperatorData();
+        renderOperatorView();
+        showStatus("Package deleted.");
+      } catch (_error) {
+        showStatus("Package assigned hai, pehle customers reassign karo.", "error");
+      }
+    });
+  });
 }
 
 function renderAppShell() {

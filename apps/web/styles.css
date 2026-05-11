@@ -399,6 +399,7 @@ td {
   text-align: left;
   padding: 14px 12px;
   border-bottom: 1px solid rgba(21, 51, 80, 0.08);
+  vertical-align: top;
 }
 
 th {
@@ -431,6 +432,13 @@ input[type="search"] {
 
 .stack-item {
   padding: 16px;
+}
+
+.action-btn {
+  margin-right: 8px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
 }
 
 .badge {
