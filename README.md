@@ -80,6 +80,6 @@ The platform should treat recharge as an internal bill-extension event and maint
 
 ## Current database mode
 
-- The current setup uses SQLite with `DATABASE_URL=file:./dev.db`.
-- This keeps the app simple and close to the original setup.
-- For Render free deployments, remember that local SQLite files can still be reset on redeploy because the filesystem is ephemeral.
+- The app is configured for PostgreSQL.
+- For Supabase, use the project connection string in `DATABASE_URL`.
+- On Render, never leave `DATABASE_URL=file:./dev.db`, otherwise data will reset on redeploy.

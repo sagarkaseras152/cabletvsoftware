@@ -10,6 +10,12 @@ import { ensureAuthState } from "./services/authService.js";
 
 const app = express();
 
+if (config.isRender && config.databaseUrl.startsWith("file:")) {
+  throw new Error(
+    "Render par SQLite file database allowed nahi hai. Supabase/Postgres ka DATABASE_URL set karo.",
+  );
+}
+
 app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 app.use(optionalAuth);
