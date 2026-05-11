@@ -569,6 +569,10 @@ button:hover,
   padding: 24px;
 }
 
+.customer-hero-authenticated {
+  grid-template-columns: 1.4fr 0.6fr;
+}
+
 .customer-hero-copy {
   padding: 18px;
 }
@@ -579,6 +583,32 @@ button:hover,
 
 .customer-hero-card {
   padding: 26px;
+}
+
+.customer-access-card {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.customer-access-details {
+  display: grid;
+  gap: 14px;
+}
+
+.customer-access-details span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.customer-access-details strong {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 1.05rem;
 }
 
 .customer-identity {

@@ -406,27 +406,51 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
   appRoot.innerHTML = `
     <div class="customer-shell">
       <div class="customer-page">
-        <section class="customer-hero">
+        <section class="customer-hero ${lookup ? "customer-hero-authenticated" : ""}">
           <div class="customer-hero-copy">
             <p class="eyebrow">Customer Portal</p>
-            <h1>Professional self-service billing and payment access.</h1>
+            <h1>${lookup ? `Welcome back, ${escapeHtml(lookup.customer.name)}.` : "Professional self-service billing and payment access."}</h1>
             <p class="lede">
-              Customer ID se login karo, apna current plan dekho, due check karo aur QR payment confirmation submit karo.
+              ${lookup
+                ? "Apna package, due, payment history aur submitted payment requests ek hi jagah clearly manage karo."
+                : "Customer ID se login karo, apna current plan dekho, due check karo aur QR payment confirmation submit karo."}
             </p>
           </div>
-          <div class="customer-hero-card">
-            <p class="eyebrow">Secure Access</p>
-            <h3>Portal Login</h3>
-            ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
-            <form id="publicPaymentLookupForm" class="form-grid">
-              <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
-              <label>Password<input name="password" type="password" value="${escapeHtml(state.publicPayment.password || "123456")}" placeholder="Default password" required /></label>
-              <button class="primary-btn" type="submit">Login to Customer Portal</button>
-            </form>
-            <div class="toolbar">
-              <button id="backToLoginBtn" class="ghost-btn" type="button">Back to Login</button>
-            </div>
-          </div>
+          ${lookup
+            ? `
+              <div class="customer-hero-card customer-access-card">
+                <p class="eyebrow">Portal Access</p>
+                ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
+                <div class="customer-access-details">
+                  <div>
+                    <span>Portal ID</span>
+                    <strong>${escapeHtml(lookup.customer.portalId)}</strong>
+                  </div>
+                  <div>
+                    <span>Operator</span>
+                    <strong>${escapeHtml(lookup.operator.paymentDisplayName || lookup.operator.businessName)}</strong>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <button id="customerLogoutBtn" class="ghost-btn" type="button">Logout</button>
+                </div>
+              </div>
+            `
+            : `
+              <div class="customer-hero-card">
+                <p class="eyebrow">Secure Access</p>
+                <h3>Portal Login</h3>
+                ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
+                <form id="publicPaymentLookupForm" class="form-grid">
+                  <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
+                  <label>Password<input name="password" type="password" value="${escapeHtml(state.publicPayment.password || "123456")}" placeholder="Default password" required /></label>
+                  <button class="primary-btn" type="submit">Login to Customer Portal</button>
+                </form>
+                <div class="toolbar">
+                  <button id="backToLoginBtn" class="ghost-btn" type="button">Back to Login</button>
+                </div>
+              </div>
+            `}
         </section>
 
         ${lookup ? `
@@ -552,26 +576,29 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
     </div>
   `;
 
-  document.getElementById("publicPaymentLookupForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    state.publicPayment.customerRef = String(formData.get("customerId") || "").trim();
-    state.publicPayment.password = String(formData.get("password") || "").trim();
-    try {
-      const response = await fetchJson("/public/customer-login", {
-        method: "POST",
-        body: JSON.stringify({
-          customerId: state.publicPayment.customerRef,
-          password: state.publicPayment.password,
-        }),
-      });
-      state.publicPayment.lookup = response;
-      window.location.hash = `#customer-pay/${encodeURIComponent(response.customer.portalId)}`;
-      renderPublicCustomerPaymentPortal();
-    } catch (error) {
-      renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Customer lookup fail ho gaya."), "error");
-    }
-  });
+  const publicPaymentLookupForm = document.getElementById("publicPaymentLookupForm");
+  if (publicPaymentLookupForm) {
+    publicPaymentLookupForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      state.publicPayment.customerRef = String(formData.get("customerId") || "").trim();
+      state.publicPayment.password = String(formData.get("password") || "").trim();
+      try {
+        const response = await fetchJson("/public/customer-login", {
+          method: "POST",
+          body: JSON.stringify({
+            customerId: state.publicPayment.customerRef,
+            password: state.publicPayment.password,
+          }),
+        });
+        state.publicPayment.lookup = response;
+        window.location.hash = `#customer-pay/${encodeURIComponent(response.customer.portalId)}`;
+        renderPublicCustomerPaymentPortal();
+      } catch (error) {
+        renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Customer lookup fail ho gaya."), "error");
+      }
+    });
+  }
 
   const publicPaymentSubmitForm = document.getElementById("publicPaymentSubmitForm");
   if (publicPaymentSubmitForm) {
@@ -592,13 +619,25 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
     });
   }
 
-  document.getElementById("backToLoginBtn").addEventListener("click", () => {
-    state.publicPayment.lookup = null;
-    state.publicPayment.customerRef = "";
-    state.publicPayment.password = "123456";
-    window.location.hash = "";
-    renderLogin();
-  });
+  const backToLoginBtn = document.getElementById("backToLoginBtn");
+  if (backToLoginBtn) {
+    backToLoginBtn.addEventListener("click", () => {
+      state.publicPayment.lookup = null;
+      state.publicPayment.customerRef = "";
+      state.publicPayment.password = "123456";
+      window.location.hash = "";
+      renderLogin();
+    });
+  }
+
+  const customerLogoutBtn = document.getElementById("customerLogoutBtn");
+  if (customerLogoutBtn) {
+    customerLogoutBtn.addEventListener("click", () => {
+      state.publicPayment.lookup = null;
+      state.publicPayment.password = "123456";
+      renderPublicCustomerPaymentPortal();
+    });
+  }
 }
 
 function renderAdminShell(user) {
