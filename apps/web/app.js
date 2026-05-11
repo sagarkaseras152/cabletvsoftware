@@ -706,54 +706,70 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
 }
 
 function renderAdminShell(user) {
+  const operatorCount = state.data.operators?.length || 0;
+  const activeCount = state.data.operators?.filter((item) => item.subscriptionStatus === "active").length || 0;
+  const selectedPlan = state.data.selectedOperator?.plan || "Owner Workspace";
+  const selectedStatus = state.data.selectedOperator?.subscriptionStatus || "live";
   appRoot.innerHTML = `
-    <div class="page-shell">
-      <div class="topbar">
-        <div>
-          <p class="eyebrow">CableOps</p>
-          <h2>Admin Control</h2>
-          <div class="topbar-meta">${user.name} | ${user.email}</div>
+      <div class="page-shell admin-shell">
+        <div class="topbar admin-topbar">
+          <div>
+            <p class="eyebrow">CableOps</p>
+            <h2>Owner Console</h2>
+            <div class="topbar-meta">${user.name} | ${user.email}</div>
+          </div>
+          <div class="inline-actions">
+            <button id="profileBtn" class="ghost-btn">Refresh Profile</button>
+            <button id="passwordBtn" class="ghost-btn">Change Password</button>
+            <button id="logoutBtn" class="primary-btn">Logout</button>
+          </div>
         </div>
-        <div class="inline-actions">
-          <button id="profileBtn" class="ghost-btn">Refresh Profile</button>
-          <button id="passwordBtn" class="ghost-btn">Change Password</button>
-          <button id="logoutBtn" class="primary-btn">Logout</button>
-        </div>
-      </div>
-
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Control Center</p>
-          <h1>Manage accounts, access and commercial operations.</h1>
-          <p class="lede">
-            Create accounts, control access, manage plans, and maintain platform-wide visibility.
-          </p>
-        </div>
-      </header>
-
-      <main class="content-grid">
-        <section id="adminFormPanel" class="panel">${renderAdminFormPanel()}</section>
-
-        <section class="split-grid admin-grid">
-          <article class="panel">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Business List</p>
-                <h2>All Accounts</h2>
+  
+        <header class="hero admin-hero">
+          <div class="hero-copy admin-hero-copy">
+            <p class="eyebrow">Platform Command</p>
+            <h1>Run operator onboarding, access control and commercial oversight from one premium control layer.</h1>
+            <p class="lede">
+              Create business accounts, tune plans, watch account health and operate the full SaaS with a cleaner executive view.
+            </p>
+          </div>
+          <div class="admin-hero-metrics">
+            <article class="admin-metric-card">
+              <span>Accounts Live</span>
+              <strong>${operatorCount}</strong>
+              <p>${activeCount} active businesses under management</p>
+            </article>
+            <article class="admin-metric-card admin-metric-card-dark">
+              <span>Focused Plan</span>
+              <strong>${escapeHtml(selectedPlan)}</strong>
+              <p>Current account status: ${escapeHtml(selectedStatus)}</p>
+            </article>
+          </div>
+        </header>
+  
+        <main class="content-grid admin-content-grid">
+          <section id="adminFormPanel" class="panel admin-form-panel">${renderAdminFormPanel()}</section>
+  
+          <section class="split-grid admin-grid premium-admin-grid">
+            <article class="panel admin-list-panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Portfolio</p>
+                  <h2>Business Accounts</h2>
+                </div>
               </div>
-            </div>
-            <div id="operatorsList" class="stack-list"></div>
-          </article>
-
-          <article class="panel">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Account Control</p>
-                <h2>Management</h2>
+              <div id="operatorsList" class="stack-list"></div>
+            </article>
+  
+            <article class="panel admin-detail-panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Account Control</p>
+                  <h2>Management Deck</h2>
+                </div>
               </div>
-            </div>
-            <div id="adminOperatorDetail">${renderAdminEmptyState()}</div>
-          </article>
+              <div id="adminOperatorDetail">${renderAdminEmptyState()}</div>
+            </article>
         </section>
       </main>
     </div>
@@ -769,28 +785,29 @@ function renderAdminFormPanel() {
   const settings = state.data.selectedOperatorSettings || {};
   const adminUser = state.data.selectedOperatorAdmins?.[0] || {};
 
-  return `
-    <div id="statusBox"></div>
-    <div class="section-head">
-      <div>
-        <p class="eyebrow">Account Onboarding</p>
-        <h2>${isEdit ? "Edit Business Account" : "Create Business Account"}</h2>
-      </div>
-      <div class="toolbar">
-        <button type="button" id="exportBackupBtn" class="ghost-btn">Export Backup</button>
-        <label class="ghost-btn backup-upload-btn">
-          Import Backup
+    return `
+      <div id="statusBox"></div>
+      <div class="section-head admin-panel-head">
+        <div>
+          <p class="eyebrow">Account Studio</p>
+          <h2>${isEdit ? "Edit Business Account" : "Create Business Account"}</h2>
+          <p class="admin-panel-subtle">${isEdit ? "Tune access, plan, support and operator business identity from one surface." : "Launch a new operator account with clean onboarding and isolated access."}</p>
+        </div>
+        <div class="toolbar">
+          <button type="button" id="exportBackupBtn" class="ghost-btn">Export Backup</button>
+          <label class="ghost-btn backup-upload-btn">
+            Import Backup
           <input id="importBackupFile" type="file" accept=".json,application/json" hidden />
         </label>
-        ${isEdit ? `<button type="button" id="adminCreateNewBtn" class="ghost-btn">Create New</button>` : ""}
+          ${isEdit ? `<button type="button" id="adminCreateNewBtn" class="ghost-btn">Create New</button>` : ""}
+        </div>
       </div>
-    </div>
-    <form id="operatorCreateForm" class="form-grid two-col-grid">
-      <label>Business Name<input name="businessName" value="${escapeHtml(item.businessName || "")}" required /></label>
-      <label>Owner Name<input name="ownerName" value="${escapeHtml(item.ownerName || "")}" required /></label>
-      <label>City<input name="city" value="${escapeHtml(item.city || "")}" /></label>
-      <label>Mobile<input name="mobile" value="${escapeHtml(item.mobile || "")}" required /></label>
-      <label>Login Email<input name="email" type="email" value="${escapeHtml(adminUser.email || "")}" ${isEdit ? "readonly" : ""} required /></label>
+      <form id="operatorCreateForm" class="form-grid two-col-grid admin-form-grid">
+        <label>Business Name<input name="businessName" value="${escapeHtml(item.businessName || "")}" required /></label>
+        <label>Owner Name<input name="ownerName" value="${escapeHtml(item.ownerName || "")}" required /></label>
+        <label>City<input name="city" value="${escapeHtml(item.city || "")}" /></label>
+        <label>Mobile<input name="mobile" value="${escapeHtml(item.mobile || "")}" required /></label>
+        <label>Login Email<input name="email" type="email" value="${escapeHtml(adminUser.email || "")}" ${isEdit ? "readonly" : ""} required /></label>
       <label>${isEdit ? "Subscription Status" : "Password"}${isEdit
         ? `<select name="subscriptionStatus">
             <option value="trial" ${item.subscriptionStatus === "trial" ? "selected" : ""}>Trial</option>
@@ -806,10 +823,10 @@ function renderAdminFormPanel() {
         <label>Address<input name="address" value="${escapeHtml(settings.address || "")}" /></label>
         <label>SMS Credits<input name="smsCredits" type="number" value="${item.smsCredits || 0}" /></label>
       ` : ""}
-      <div class="form-actions"><button class="primary-btn" type="submit">${isEdit ? "Save Account Changes" : "Create Account"}</button></div>
-    </form>
-  `;
-}
+        <div class="form-actions admin-form-actions"><button class="primary-btn" type="submit">${isEdit ? "Save Account Changes" : "Create Account"}</button></div>
+      </form>
+    `;
+  }
 
 function attachAdminFormEvents() {
   const operatorCreateForm = document.getElementById("operatorCreateForm");
@@ -921,8 +938,14 @@ function attachAdminFormEvents() {
 }
 
 function renderAdminEmptyState() {
-  return `<div class="empty-state">Select a business account to manage login, plan, subscription status and billing settings.</div>`;
-}
+    return `
+      <div class="admin-empty-state">
+        <p class="eyebrow">No Account Selected</p>
+        <h3>Choose a business from the left portfolio.</h3>
+        <p>Once selected, you can manage plan, access, password resets, support identity and subscription status from this deck.</p>
+      </div>
+    `;
+  }
 
 function renderAdminOperatorDetail() {
   const item = state.data.selectedOperator;
@@ -933,17 +956,17 @@ function renderAdminOperatorDetail() {
   if (!item) return renderAdminEmptyState();
 
   return `
-    <div class="menu-grid">
-      <article class="menu-card"><h3>Plan</h3><p>${item.plan}</p><span>Subscription status: ${item.subscriptionStatus}</span></article>
-      <article class="menu-card"><h3>Customers</h3><p>${metrics?.activeCustomers || 0}</p><span>Pending due: ${formatMoney(metrics?.pendingCollections || 0)}</span></article>
-      <article class="menu-card"><h3>Collection</h3><p>${formatMoney(metrics?.totalCollection || 0)}</p><span>Monthly counter: ${formatMoney(metrics?.monthCollection || 0)}</span></article>
-      <article class="menu-card"><h3>Login</h3><p>${adminUser?.email || "-"}</p><span>${adminUser?.name || "No admin mapped"}</span></article>
-    </div>
-
-    <form id="operatorManageForm" class="form-grid two-col-grid">
-      <label>Business Name<input name="businessName" value="${item.businessName || ""}" required /></label>
-      <label>Owner Name<input name="ownerName" value="${item.ownerName || ""}" required /></label>
-      <label>City<input name="city" value="${item.city || ""}" /></label>
+      <div class="menu-grid admin-summary-grid">
+        <article class="menu-card admin-summary-card"><h3>Plan</h3><p>${item.plan}</p><span>Subscription status: ${item.subscriptionStatus}</span></article>
+        <article class="menu-card admin-summary-card"><h3>Customers</h3><p>${metrics?.activeCustomers || 0}</p><span>Pending due: ${formatMoney(metrics?.pendingCollections || 0)}</span></article>
+        <article class="menu-card admin-summary-card"><h3>Collection</h3><p>${formatMoney(metrics?.totalCollection || 0)}</p><span>Monthly counter: ${formatMoney(metrics?.monthCollection || 0)}</span></article>
+        <article class="menu-card admin-summary-card admin-summary-card-dark"><h3>Login</h3><p>${adminUser?.email || "-"}</p><span>${adminUser?.name || "No admin mapped"}</span></article>
+      </div>
+  
+      <form id="operatorManageForm" class="form-grid two-col-grid admin-manage-form">
+        <label>Business Name<input name="businessName" value="${item.businessName || ""}" required /></label>
+        <label>Owner Name<input name="ownerName" value="${item.ownerName || ""}" required /></label>
+        <label>City<input name="city" value="${item.city || ""}" /></label>
       <label>Mobile<input name="mobile" value="${item.mobile || ""}" /></label>
       <label>Plan
         <select name="plan">
@@ -968,12 +991,12 @@ function renderAdminOperatorDetail() {
       <div class="form-actions"><button class="primary-btn" type="submit">Save Account Changes</button></div>
     </form>
 
-    <div class="toolbar">
-      <button type="button" id="editOperatorInFormBtn" class="ghost-btn">Edit In Form</button>
-      <button type="button" id="resetOperatorPasswordBtn" class="ghost-btn">Reset Operator Password</button>
-      <button type="button" id="toggleOperatorStatusBtn" class="ghost-btn">${item.subscriptionStatus === "suspended" ? "Activate Account" : "Suspend Account"}</button>
-    </div>
-  `;
+      <div class="toolbar admin-detail-toolbar">
+        <button type="button" id="editOperatorInFormBtn" class="ghost-btn">Edit In Form</button>
+        <button type="button" id="resetOperatorPasswordBtn" class="ghost-btn">Reset Operator Password</button>
+        <button type="button" id="toggleOperatorStatusBtn" class="ghost-btn">${item.subscriptionStatus === "suspended" ? "Activate Account" : "Suspend Account"}</button>
+      </div>
+    `;
 }
 
 function renderOperatorShell(user, tenant) {
@@ -1867,10 +1890,13 @@ function renderOperatorsAdminList(items) {
       const selected = state.adminSelectedOperatorId === item.id;
       const adminEmail = item.users?.[0]?.email || "-";
       return `
-        <button type="button" class="nav-item ${selected ? "active-nav" : ""} admin-operator-item" data-operator-id="${item.id}">
-          <strong>${item.businessName}</strong>
+        <button type="button" class="nav-item ${selected ? "active-nav" : ""} admin-operator-item premium-operator-card" data-operator-id="${item.id}">
+          <div class="admin-operator-card-top">
+            <strong>${item.businessName}</strong>
+            <span class="badge ${badgeClass(item.subscriptionStatus)}">${item.subscriptionStatus}</span>
+          </div>
           <span>${item.ownerName} | ${item.city || "-"}</span>
-          <span>${item.plan} | ${item.subscriptionStatus}</span>
+          <span>${item.plan} plan</span>
           <span>${adminEmail}</span>
         </button>
       `;
