@@ -199,11 +199,6 @@ function renderAdminShell(user) {
             Create accounts, control access, manage plans, and maintain platform-wide visibility.
           </p>
         </div>
-        <div class="hero-panel">
-          <div class="metric-card"><span>Total Operators</span><strong id="mrrValue">-</strong></div>
-          <div class="metric-card"><span>Total Customers</span><strong id="customerValue">-</strong></div>
-          <div class="metric-card"><span>Pending Platform Due</span><strong id="pendingValue">-</strong></div>
-        </div>
       </header>
 
       <main class="content-grid">
@@ -211,8 +206,8 @@ function renderAdminShell(user) {
           <div id="statusBox"></div>
           <div class="section-head">
             <div>
-              <p class="eyebrow">Operator Onboarding</p>
-              <h2>Create Operator Account</h2>
+              <p class="eyebrow">Account Onboarding</p>
+              <h2>Create Business Account</h2>
             </div>
           </div>
           <form id="operatorCreateForm" class="form-grid two-col-grid">
@@ -223,15 +218,15 @@ function renderAdminShell(user) {
             <label>Login Email<input name="email" type="email" required /></label>
             <label>Password<input name="password" required /></label>
             <label>Plan<input name="plan" value="Trial" /></label>
-            <div class="form-actions"><button class="primary-btn" type="submit">Create Operator</button></div>
+            <div class="form-actions"><button class="primary-btn" type="submit">Create Account</button></div>
           </form>
         </section>
 
         <section class="panel">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Operator List</p>
-              <h2>All Operators</h2>
+              <p class="eyebrow">Business List</p>
+              <h2>All Accounts</h2>
             </div>
           </div>
           <div id="operatorsList" class="list-grid"></div>
@@ -257,11 +252,11 @@ function renderAdminShell(user) {
           plan: formData.get("plan"),
         }),
       });
-      showStatus(`Operator created. Login: ${response.login.email} / ${response.login.password}`);
+      showStatus("Business account created successfully.");
       event.currentTarget.reset();
       await hydrateDashboard();
     } catch (_error) {
-      showStatus("Operator create nahi hua.", "error");
+      showStatus("Account create nahi hua.", "error");
     }
   });
 }
@@ -299,11 +294,6 @@ function renderOperatorShell(user, tenant) {
               <p class="lede">
                 Collections, due tracking, package control, recharge flow, customer records and team operations in one premium workspace.
               </p>
-            </div>
-            <div class="hero-panel">
-              <div class="metric-card"><span>Monthly Collection</span><strong id="mrrValue">-</strong></div>
-              <div class="metric-card"><span>My Customers</span><strong id="customerValue">-</strong></div>
-              <div class="metric-card"><span>Pending Collection</span><strong id="pendingValue">-</strong></div>
             </div>
           </header>
 
@@ -1084,9 +1074,6 @@ async function loadPlatformOwnerData() {
   ]);
 
   state.data.operators = operatorsResponse.items;
-  document.getElementById("mrrValue").textContent = String(operatorsResponse.items.length);
-  document.getElementById("customerValue").textContent = overviewResponse.overview.platform.totalEndCustomers.toLocaleString("en-IN");
-  document.getElementById("pendingValue").textContent = formatMoney(overviewResponse.overview.platform.pendingCollections);
   document.getElementById("operatorsList").innerHTML = operatorsResponse.items
     .map(
       (item) => `
@@ -1124,25 +1111,19 @@ async function loadOperatorData() {
   state.data.staff = staff.items;
   state.data.expenses = expenses.items;
   state.data.settings = settings.item;
-
-  const operator = operators.items[0];
-  const pending = customers.items.reduce((sum, item) => sum + (Number(item.dueAmount) || 0), 0);
-  document.getElementById("mrrValue").textContent = formatMoney(operator?.monthlyCollection || 0);
-  document.getElementById("customerValue").textContent = String(customers.items.length);
-  document.getElementById("pendingValue").textContent = formatMoney(pending);
 }
 
 async function hydrateDashboard() {
   const session = getSession();
   if (session.user.role === "platform_owner") {
     await loadPlatformOwnerData();
-    showStatus("Admin panel loaded.");
+    showStatus("Workspace loaded.");
     return;
   }
 
   await loadOperatorData();
   renderOperatorView();
-  showStatus("Operator workspace loaded.");
+  showStatus("Workspace loaded.");
 }
 
 if (getSession()?.token) {
