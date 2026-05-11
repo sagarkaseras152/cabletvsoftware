@@ -2,6 +2,7 @@ services:
   - type: web
     name: cableops-api
     runtime: node
+    plan: free
     rootDir: .
     buildCommand: npm install
     startCommand: npm run start:api
@@ -21,5 +22,6 @@ services:
     name: cableops-web
     runtime: static
     rootDir: apps/web
+    plan: free
     buildCommand: ""
     staticPublishPath: .
