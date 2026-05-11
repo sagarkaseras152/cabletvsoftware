@@ -30,8 +30,8 @@ export const tenants = [
   {
     id: "tenant-demooperator",
     code: "DEMOOP1",
-    businessName: "Demo Operator Network",
-    ownerName: "Demo Owner",
+    businessName: "Apex Cable Network",
+    ownerName: "Sagar Kasera",
     plan: "Standard",
     subscriptionStatus: "active",
     city: "Bhopal",
@@ -77,7 +77,7 @@ export const packages = [
   {
     id: "pkg-demo-fiber",
     tenantId: "tenant-demooperator",
-    name: "Demo Fiber 40 Mbps",
+    name: "Fiber 40 Mbps",
     type: "internet",
     price: 599,
     validityDays: 30,
@@ -146,7 +146,7 @@ export const customers = [
     area: "Arera Colony",
     status: "active",
     packageId: "pkg-demo-fiber",
-    packageName: "Demo Fiber 40 Mbps",
+    packageName: "Fiber 40 Mbps",
     dueAmount: 599,
     dueDate: "2026-05-18",
     expiryDate: "2026-05-18",
@@ -261,7 +261,7 @@ export const expenses = [
 export const tenantSettings = [
   {
     tenantId: "tenant-demooperator",
-    companyName: "Demo Operator Network",
+    companyName: "Apex Cable Network",
     billingDay: 5,
     lateFee: 25,
     supportMobile: "9999999999",
@@ -335,6 +335,6 @@ export const authProfiles = [
     password: "demo12345",
     role: "operator_admin",
     tenantId: "tenant-demooperator",
-    name: "Demo Operator Admin",
+    name: "Apex Network Admin",
   },
 ];

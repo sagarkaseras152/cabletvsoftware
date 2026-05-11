@@ -263,12 +263,13 @@ function renderAdminShell(user) {
 }
 
 function renderOperatorShell(user, tenant) {
+  const brandName = state.data.settings?.companyName || tenant?.businessName || "Workspace";
   appRoot.innerHTML = `
     <div class="page-shell">
       <div class="topbar">
         <div>
           <p class="eyebrow">CableOps</p>
-          <h2>${tenant?.businessName || "Workspace"}</h2>
+          <h2 id="workspaceTitle">${brandName}</h2>
           <div class="topbar-meta">${user.name} | ${user.email}</div>
         </div>
         <div class="inline-actions">
@@ -316,6 +317,13 @@ function renderOperatorNav() {
 
 function tableWrapper(inner) {
   return `<div class="table-wrap">${inner}</div>`;
+}
+
+function updateWorkspaceBrand() {
+  const title = document.getElementById("workspaceTitle");
+  const session = getSession();
+  if (!title || !session?.user || session.user.role === "platform_owner") return;
+  title.textContent = state.data.settings?.companyName || session.tenant?.businessName || "Workspace";
 }
 
 function renderOperatorView() {
@@ -540,9 +548,9 @@ function renderOperatorView() {
     `,
     settings: `
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Operator Settings</h2></div></div>
+        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand and Billing Settings</h2></div></div>
         <form id="settingsForm" class="form-grid two-col-grid">
-          <label>Company Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
+          <label>Firm Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
           <label>Support Mobile<input name="supportMobile" value="${data.settings?.supportMobile || ""}" /></label>
           <label>Billing Day<input name="billingDay" type="number" value="${data.settings?.billingDay || 1}" /></label>
           <label>Late Fee<input name="lateFee" type="number" value="${data.settings?.lateFee || 0}" /></label>
@@ -1117,6 +1125,7 @@ async function loadOperatorData() {
   state.data.staff = staff.items;
   state.data.expenses = expenses.items;
   state.data.settings = settings.item;
+  updateWorkspaceBrand();
 }
 
 async function hydrateDashboard() {

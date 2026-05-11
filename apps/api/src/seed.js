@@ -21,8 +21,8 @@ export async function seedDatabase() {
   await upsertTenant({
     id: "tenant-demooperator",
     code: "DEMOOP1",
-    businessName: "Demo Operator Network",
-    ownerName: "Demo Owner",
+    businessName: "Apex Cable Network",
+    ownerName: "Sagar Kasera",
     plan: "Standard",
     subscriptionStatus: "active",
     city: "Bhopal",
@@ -62,7 +62,7 @@ export async function seedDatabase() {
   await upsertUser({
     id: "user-operator-demo",
     tenantId: "tenant-demooperator",
-    name: "Demo Operator Admin",
+    name: "Apex Network Admin",
     email: "demo.operator@cableops.in",
     mobile: "9000000001",
     passwordHash: await bcrypt.hash("demo12345", 10),
@@ -72,11 +72,18 @@ export async function seedDatabase() {
 
   await prisma.package.upsert({
     where: { id: "pkg-demo-fiber" },
-    update: {},
+    update: {
+      tenantId: "tenant-demooperator",
+      name: "Fiber 40 Mbps",
+      type: "internet",
+      price: 599,
+      validityDays: 30,
+      customers: 1,
+    },
     create: {
       id: "pkg-demo-fiber",
       tenantId: "tenant-demooperator",
-      name: "Demo Fiber 40 Mbps",
+      name: "Fiber 40 Mbps",
       type: "internet",
       price: 599,
       validityDays: 30,
@@ -86,7 +93,20 @@ export async function seedDatabase() {
 
   await prisma.customer.upsert({
     where: { id: "cust-3001" },
-    update: {},
+    update: {
+      tenantId: "tenant-demooperator",
+      customerCode: "DOP-3001",
+      name: "Rahul Soni",
+      mobile: "9833333333",
+      area: "Arera Colony",
+      status: "active",
+      packageId: "pkg-demo-fiber",
+      packageName: "Fiber 40 Mbps",
+      dueAmount: 599,
+      dueDate: "2026-05-18",
+      expiryDate: "2026-05-18",
+      connectionType: "internet",
+    },
     create: {
       id: "cust-3001",
       tenantId: "tenant-demooperator",
@@ -96,7 +116,7 @@ export async function seedDatabase() {
       area: "Arera Colony",
       status: "active",
       packageId: "pkg-demo-fiber",
-      packageName: "Demo Fiber 40 Mbps",
+      packageName: "Fiber 40 Mbps",
       dueAmount: 599,
       dueDate: "2026-05-18",
       expiryDate: "2026-05-18",
@@ -106,7 +126,13 @@ export async function seedDatabase() {
 
   await prisma.staffMember.upsert({
     where: { id: "staff-1" },
-    update: {},
+    update: {
+      tenantId: "tenant-demooperator",
+      name: "Rakesh Collector",
+      mobile: "9898989898",
+      role: "collector",
+      status: "active",
+    },
     create: {
       id: "staff-1",
       tenantId: "tenant-demooperator",
@@ -119,7 +145,13 @@ export async function seedDatabase() {
 
   await prisma.expense.upsert({
     where: { id: "exp-1" },
-    update: {},
+    update: {
+      tenantId: "tenant-demooperator",
+      title: "Fiber maintenance",
+      category: "Maintenance",
+      amount: 2500,
+      expenseDate: "2026-05-10",
+    },
     create: {
       id: "exp-1",
       tenantId: "tenant-demooperator",
@@ -132,10 +164,16 @@ export async function seedDatabase() {
 
   await prisma.tenantSetting.upsert({
     where: { tenantId: "tenant-demooperator" },
-    update: {},
+    update: {
+      companyName: "Apex Cable Network",
+      billingDay: 5,
+      lateFee: 25,
+      supportMobile: "9999999999",
+      address: "Bhopal",
+    },
     create: {
       tenantId: "tenant-demooperator",
-      companyName: "Demo Operator Network",
+      companyName: "Apex Cable Network",
       billingDay: 5,
       lateFee: 25,
       supportMobile: "9999999999",
