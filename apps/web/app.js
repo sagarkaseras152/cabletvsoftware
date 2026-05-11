@@ -148,6 +148,16 @@ function showStatus(message, type = "success") {
   }
 }
 
+function parseErrorMessage(error, fallback = "Request failed.") {
+  try {
+    const parsed = JSON.parse(error.message);
+    if (parsed?.message) return parsed.message;
+  } catch {
+  }
+
+  return error?.message || fallback;
+}
+
 function renderLogin(message = "") {
   appRoot.innerHTML = `
     <div class="auth-shell">
@@ -296,8 +306,8 @@ function renderAdminShell(user) {
       showStatus("Business account created successfully.");
       event.currentTarget.reset();
       await hydrateDashboard();
-    } catch (_error) {
-      showStatus("Account create nahi hua.", "error");
+    } catch (error) {
+      showStatus(parseErrorMessage(error, "Account create nahi hua."), "error");
     }
   });
 }

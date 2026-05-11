@@ -1,8 +1,9 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePlatformOwner } from "../middleware/access.js";
 import { prisma } from "../db.js";
-import { registerOperatorAdmin, resetUserPassword } from "../services/authService.js";
+import { resetUserPassword } from "../services/authService.js";
 
 const router = Router();
 
@@ -90,76 +91,104 @@ router.post("/", requirePlatformOwner, async (req, res) => {
     });
   }
 
-  const allTenants = await prisma.tenant.findMany();
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedBusinessName = String(businessName).trim();
+
+  const [allTenants, existingEmailUser] = await Promise.all([
+    prisma.tenant.findMany(),
+    prisma.user.findUnique({ where: { email: normalizedEmail } }),
+  ]);
+
   const existingTenant = allTenants.find(
-    (item) => item.businessName.toLowerCase() === String(businessName).toLowerCase(),
+    (item) => item.businessName.toLowerCase() === normalizedBusinessName.toLowerCase(),
   );
   if (existingTenant) {
     return res.status(400).json({
       ok: false,
-      message: "Operator already exists",
+      message: "Business account already exists",
     });
   }
 
-  const codeBase = String(businessName).replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "OPR";
-  const tenant = await prisma.tenant.create({
-    data: {
-    id: `tenant-${Date.now()}`,
-    code: `${codeBase}${allTenants.length + 1}`,
-    businessName,
-    ownerName,
-    plan,
-    subscriptionStatus: "trial",
-    city: city || "Unknown",
-    activeCustomers: 0,
-    staffCount: 1,
-    smsCredits: 0,
-    monthlyCollection: 0,
-    mobile,
-    },
-  });
-
-  const userResult = await registerOperatorAdmin({
-    email,
-    password,
-    tenantId: tenant.id,
-    name: `${businessName} Admin`,
-  });
-
-  if (!userResult.ok) {
-    return res.status(400).json(userResult);
+  if (existingEmailUser) {
+    return res.status(400).json({
+      ok: false,
+      message: "Login email already exists",
+    });
   }
 
-  const settings = await prisma.tenantSetting.create({
-    data: {
-      tenantId: tenant.id,
-      companyName: businessName,
-      billingDay: 1,
-      lateFee: 0,
-      supportMobile: mobile,
-      address: city || "",
-      acsUsername: `${tenant.code.toLowerCase()}-acs`,
-      acsPassword: `acs-${Date.now()}`,
-      defaultAcsProfile: "tr181",
-      defaultWifiSsidPath: "Device.WiFi.SSID.1.SSID",
-      defaultWifiPasswordPath: "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
-      defaultInformInterval: 300,
-      autoApproveOnts: true,
-      tr069TemplateName: "Default Home Fiber",
-    },
-  });
+  const codeBase = normalizedBusinessName.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "OPR";
 
-  return res.status(201).json({
-    ok: true,
-    message: "Operator account created successfully",
-    operator: tenant,
-    settings,
-    login: {
-      url: "/",
-      email,
-      password,
-    },
-  });
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          id: `tenant-${Date.now()}`,
+          code: `${codeBase}${allTenants.length + 1}`,
+          businessName: normalizedBusinessName,
+          ownerName,
+          plan,
+          subscriptionStatus: "trial",
+          city: city || "Unknown",
+          activeCustomers: 0,
+          staffCount: 1,
+          smsCredits: 0,
+          monthlyCollection: 0,
+          mobile,
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          id: `user-${Date.now()}`,
+          tenantId: tenant.id,
+          name: `${normalizedBusinessName} Admin`,
+          email: normalizedEmail,
+          mobile: "",
+          passwordHash: await bcrypt.hash(password, 10),
+          role: "operator_admin",
+          isActive: true,
+        },
+      });
+
+      const settings = await tx.tenantSetting.create({
+        data: {
+          tenantId: tenant.id,
+          companyName: normalizedBusinessName,
+          billingDay: 1,
+          lateFee: 0,
+          supportMobile: mobile,
+          address: city || "",
+          acsUsername: `${tenant.code.toLowerCase()}-acs`,
+          acsPassword: `acs-${Date.now()}`,
+          defaultAcsProfile: "tr181",
+          defaultWifiSsidPath: "Device.WiFi.SSID.1.SSID",
+          defaultWifiPasswordPath: "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
+          defaultInformInterval: 300,
+          autoApproveOnts: true,
+          tr069TemplateName: "Default Home Fiber",
+        },
+      });
+
+      return { tenant, user, settings };
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: "Operator account created successfully",
+      operator: result.tenant,
+      settings: result.settings,
+      login: {
+        url: "/",
+        email: normalizedEmail,
+        password,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      message: error?.message || "Operator account create failed",
+    });
+  }
 });
 
 router.patch("/:id", requirePlatformOwner, async (req, res) => {
