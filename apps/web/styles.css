@@ -492,6 +492,14 @@ button:hover,
   padding: 28px;
 }
 
+.inline-form-block {
+  margin-bottom: 22px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(247, 249, 252, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;

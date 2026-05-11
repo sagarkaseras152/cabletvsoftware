@@ -24,6 +24,7 @@ const operatorMenu = [
 
 const state = {
   operatorView: "dashboard",
+  customerFormOpen: false,
   dashboardFilters: {
     dueStart: "",
     dueEnd: "",
@@ -383,31 +384,37 @@ function renderOperatorView() {
     `,
     customers: `
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Customers</p><h2>Add New Customer</h2></div></div>
-        <form id="customerForm" class="form-grid two-col-grid">
-          <label>Name<input name="name" required /></label>
-          <label>Mobile<input name="mobile" required /></label>
-          <label>Area<input name="area" /></label>
-          <label>Package
-            <select name="packageId">
-              <option value="">No package</option>
-              ${renderPackageOptions(data.packages)}
-            </select>
-          </label>
-          <label>Due Amount<input name="dueAmount" type="number" /></label>
-          <label>Due Date<input name="dueDate" type="date" /></label>
-          <label>Connection Type
-            <select name="connectionType">
-              <option value="cable">Cable TV</option>
-              <option value="internet">Internet</option>
-              <option value="both">Both</option>
-            </select>
-          </label>
-          <div class="form-actions"><button class="primary-btn" type="submit">Add Customer</button></div>
-        </form>
-      </section>
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Customer List</p><h2>Manage Customers</h2></div></div>
+        <div class="section-head">
+          <div><p class="eyebrow">Customers</p><h2>Customer List</h2></div>
+          <button type="button" id="toggleCustomerForm" class="primary-btn">
+            ${state.customerFormOpen ? "Close Form" : "Add New Customer"}
+          </button>
+        </div>
+        ${state.customerFormOpen
+          ? `
+            <form id="customerForm" class="form-grid two-col-grid inline-form-block">
+              <label>Name<input name="name" required /></label>
+              <label>Mobile<input name="mobile" required /></label>
+              <label>Area<input name="area" /></label>
+              <label>Package
+                <select name="packageId">
+                  <option value="">No package</option>
+                  ${renderPackageOptions(data.packages)}
+                </select>
+              </label>
+              <label>Due Amount<input name="dueAmount" type="number" /></label>
+              <label>Due Date<input name="dueDate" type="date" /></label>
+              <label>Connection Type
+                <select name="connectionType">
+                  <option value="cable">Cable TV</option>
+                  <option value="internet">Internet</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+              <div class="form-actions"><button class="primary-btn" type="submit">Save Customer</button></div>
+            </form>
+          `
+          : ""}
         ${tableWrapper(renderCustomerTable(data.customers))}
       </section>
     `,
@@ -900,6 +907,14 @@ async function handleOperatorAction(action, id) {
 }
 
 function attachOperatorSectionEvents() {
+  const toggleCustomerForm = document.getElementById("toggleCustomerForm");
+  if (toggleCustomerForm) {
+    toggleCustomerForm.addEventListener("click", () => {
+      state.customerFormOpen = !state.customerFormOpen;
+      renderOperatorView();
+    });
+  }
+
   const dueStartFilter = document.getElementById("dueStartFilter");
   if (dueStartFilter) {
     dueStartFilter.addEventListener("change", (event) => {
@@ -934,6 +949,7 @@ function attachOperatorSectionEvents() {
         method: "POST",
         body: JSON.stringify(Object.fromEntries(formData.entries())),
       });
+      state.customerFormOpen = false;
       await loadOperatorData();
       renderOperatorView();
       showStatus("Customer added successfully.");
