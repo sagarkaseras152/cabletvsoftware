@@ -138,6 +138,19 @@ function getAcsEndpoint() {
   return `${apiBase.replace(/\/api$/, "")}/api/acs/cwmp/${tenantCode}`;
 }
 
+function buildUpiPaymentLink({ upiId = "", displayName = "", amount = 0, note = "" }) {
+  const pa = String(upiId || "").trim();
+  if (!pa) return "";
+  const params = new URLSearchParams({
+    pa,
+    pn: String(displayName || "Operator Payment").trim(),
+    am: String(Number(amount || 0)),
+    cu: "INR",
+    tn: String(note || "CableOps customer payment").trim(),
+  });
+  return `upi://pay?${params.toString()}`;
+}
+
 function badgeClass(status) {
   const map = {
     active: "active",
@@ -403,6 +416,14 @@ function renderLogin(message = "") {
 function renderPublicCustomerPaymentPortal(message = "", messageType = "error") {
   const lookup = state.publicPayment.lookup;
   const portalCustomerId = getCustomerPortalIdFromHash();
+  const upiLink = lookup
+    ? buildUpiPaymentLink({
+        upiId: lookup.operator.upiId,
+        displayName: lookup.operator.paymentDisplayName || lookup.operator.businessName,
+        amount: lookup.customer.dueAmount || 0,
+        note: `${lookup.customer.portalId} payment`,
+      })
+    : "";
   appRoot.innerHTML = `
     <div class="customer-shell">
       <div class="customer-page">
@@ -510,6 +531,12 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
                 </div>
                 <div class="customer-payment-form-wrap">
                   <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
+                  <div class="customer-payment-actions">
+                    ${upiLink
+                      ? `<a class="primary-btn customer-pay-now-btn" href="${escapeHtml(upiLink)}">Pay via UPI App</a>`
+                      : `<div class="empty-state">Operator ne abhi UPI ID set nahi ki hai.</div>`}
+                    <span class="subtle-note">Mobile me supported UPI app direct open ho sakti hai. Payment ke baad niche confirmation submit karein.</span>
+                  </div>
                   <form id="publicPaymentSubmitForm" class="form-grid">
                     <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.portalId)}" />
                     <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>

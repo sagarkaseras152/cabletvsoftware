@@ -742,6 +742,19 @@ button:hover,
   gap: 16px;
 }
 
+.customer-payment-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-pay-now-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-width: 220px;
+}
+
 .customer-history-list {
   display: grid;
   gap: 14px;
