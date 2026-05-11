@@ -31,6 +31,7 @@ model Tenant {
   olts               Olt[]
   onts               Ont[]
   acsTasks           AcsTask[]
+  acsEvents          AcsEvent[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -210,6 +211,7 @@ model Ont {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   acsTasks               AcsTask[]
+  acsEvents              AcsEvent[]
 
   @@unique([tenantId, serialNumber])
 }
@@ -239,6 +241,7 @@ model AcsEvent {
   tenantId      String
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   ontId         String?
+  ont           Ont?     @relation(fields: [ontId], references: [id])
   eventType     String
   serialNumber  String?
   payload       String?
