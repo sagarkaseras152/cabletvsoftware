@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePlatformOwner } from "../middleware/access.js";
 import { prisma } from "../db.js";
 import { registerOperatorAdmin } from "../services/authService.js";
 
@@ -23,6 +24,13 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
+  if (req.user.role !== "platform_owner" && req.user.tenantId !== req.params.id) {
+    return res.status(403).json({
+      ok: false,
+      message: "You do not have access to this business account",
+    });
+  }
+
   const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
 
   if (!tenant) {
@@ -40,14 +48,7 @@ router.get("/:id", async (req, res) => {
   });
 });
 
-router.post("/", async (req, res) => {
-  if (req.user.role !== "platform_owner") {
-    return res.status(403).json({
-      ok: false,
-      message: "Only platform owner can create operators",
-    });
-  }
-
+router.post("/", requirePlatformOwner, async (req, res) => {
   const {
     businessName,
     ownerName,
@@ -105,12 +106,32 @@ router.post("/", async (req, res) => {
     return res.status(400).json(userResult);
   }
 
+  const settings = await prisma.tenantSetting.create({
+    data: {
+      tenantId: tenant.id,
+      companyName: businessName,
+      billingDay: 1,
+      lateFee: 0,
+      supportMobile: mobile,
+      address: city || "",
+      acsUsername: `${tenant.code.toLowerCase()}-acs`,
+      acsPassword: `acs-${Date.now()}`,
+      defaultAcsProfile: "tr181",
+      defaultWifiSsidPath: "Device.WiFi.SSID.1.SSID",
+      defaultWifiPasswordPath: "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
+      defaultInformInterval: 300,
+      autoApproveOnts: true,
+      tr069TemplateName: "Default Home Fiber",
+    },
+  });
+
   return res.status(201).json({
     ok: true,
     message: "Operator account created successfully",
     operator: tenant,
+    settings,
     login: {
-      url: "http://localhost:4173",
+      url: "/",
       email,
       password,
     },
