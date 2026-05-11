@@ -404,78 +404,150 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
   const lookup = state.publicPayment.lookup;
   const portalCustomerId = getCustomerPortalIdFromHash();
   appRoot.innerHTML = `
-    <div class="auth-shell">
-      <div class="auth-card">
-        <section class="auth-brand">
-          <p class="eyebrow">Customer Payment</p>
-          <h1>Pay your operator using the assigned QR.</h1>
-          <p class="lede">
-            Apna unique Customer Portal ID dalo. Iske baad aapko apni details, package, due amount aur payment confirmation screen milegi.
-          </p>
-        </section>
-        <section class="auth-form">
-          <p class="eyebrow">Secure Payment Lookup</p>
-          <h2>Find your account</h2>
-          ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
-          <form id="publicPaymentLookupForm" class="form-grid">
-            <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
-            <label>Password<input name="password" type="password" value="${escapeHtml(state.publicPayment.password || "123456")}" placeholder="Default password" required /></label>
-            <button class="primary-btn" type="submit">Login to Customer Portal</button>
-          </form>
-          ${lookup ? `
-            <div class="inline-form-block public-payment-card">
-              <p class="eyebrow">Customer Portal</p>
-              <h3>${escapeHtml(lookup.operator.paymentDisplayName || lookup.operator.businessName)}</h3>
-              <p class="subtle-note">${escapeHtml(lookup.customer.name)} | ${escapeHtml(lookup.customer.mobile)} | Portal ID ${escapeHtml(lookup.customer.portalId)}</p>
-              <div class="import-summary-grid">
-                <article class="menu-card"><h3>Package</h3><p>${escapeHtml(lookup.customer.packageName || "-")}</p></article>
-                <article class="menu-card"><h3>Due</h3><p>${formatMoney(lookup.customer.dueAmount || 0)}</p></article>
-                <article class="menu-card"><h3>Due Date</h3><p>${escapeHtml(formatDate(lookup.customer.dueDate))}</p></article>
-                <article class="menu-card"><h3>Status</h3><p>${escapeHtml(lookup.customer.status || "-")}</p></article>
-              </div>
-              ${lookup.operator.qrImageUrl ? `<img class="qr-preview" src="${escapeHtml(lookup.operator.qrImageUrl)}" alt="Operator QR" />` : `<div class="empty-state">QR image abhi set nahi hai. UPI ID: <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong></div>`}
-              <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
-              <form id="publicPaymentSubmitForm" class="form-grid">
-                <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.portalId)}" />
-                <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
-                <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
-                <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
-                <button class="primary-btn" type="submit">Submit Payment Confirmation</button>
-              </form>
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>Recent Payments</th><th>Amount</th><th>Status</th></tr></thead>
-                  <tbody>
-                    ${(lookup.payments || []).map((item) => `
-                      <tr>
-                        <td>${escapeHtml(formatDate(item.paymentDate))}<br /><span class="subtle-note">${escapeHtml(item.receiptNumber || "-")}</span></td>
-                        <td>${formatMoney(item.amountPaid)}</td>
-                        <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
-                      </tr>
-                    `).join("") || `<tr><td colspan="3">No payment history yet.</td></tr>`}
-                  </tbody>
-                </table>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>Pending Requests</th><th>Amount</th><th>Status</th></tr></thead>
-                  <tbody>
-                    ${(lookup.paymentRequests || []).map((item) => `
-                      <tr>
-                        <td>${escapeHtml(formatDate(item.paidAt || item.createdAt))}<br /><span class="subtle-note">${escapeHtml(item.utrNumber || "-")}</span></td>
-                        <td>${formatMoney(item.amount)}</td>
-                        <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
-                      </tr>
-                    `).join("") || `<tr><td colspan="3">No payment requests yet.</td></tr>`}
-                  </tbody>
-                </table>
-              </div>
+    <div class="customer-shell">
+      <div class="customer-page">
+        <section class="customer-hero">
+          <div class="customer-hero-copy">
+            <p class="eyebrow">Customer Portal</p>
+            <h1>Professional self-service billing and payment access.</h1>
+            <p class="lede">
+              Customer ID se login karo, apna current plan dekho, due check karo aur QR payment confirmation submit karo.
+            </p>
+          </div>
+          <div class="customer-hero-card">
+            <p class="eyebrow">Secure Access</p>
+            <h3>Portal Login</h3>
+            ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
+            <form id="publicPaymentLookupForm" class="form-grid">
+              <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
+              <label>Password<input name="password" type="password" value="${escapeHtml(state.publicPayment.password || "123456")}" placeholder="Default password" required /></label>
+              <button class="primary-btn" type="submit">Login to Customer Portal</button>
+            </form>
+            <div class="toolbar">
+              <button id="backToLoginBtn" class="ghost-btn" type="button">Back to Login</button>
             </div>
-          ` : ""}
-          <div class="toolbar">
-            <button id="backToLoginBtn" class="ghost-btn" type="button">Back to Login</button>
           </div>
         </section>
+
+        ${lookup ? `
+          <section class="customer-identity">
+            <div>
+              <p class="eyebrow">Account Summary</p>
+              <h2>${escapeHtml(lookup.customer.name)}</h2>
+              <p class="customer-meta-line">${escapeHtml(lookup.operator.paymentDisplayName || lookup.operator.businessName)} | ${escapeHtml(lookup.customer.mobile)} | Portal ID ${escapeHtml(lookup.customer.portalId)}</p>
+            </div>
+            <div class="customer-status-cluster">
+              <span class="badge ${badgeClass(lookup.customer.status)}">${escapeHtml(lookup.customer.status || "-")}</span>
+              <strong>${formatMoney(lookup.customer.dueAmount || 0)}</strong>
+              <span class="subtle-note">Current due</span>
+            </div>
+          </section>
+
+          <section class="customer-kpis">
+            <article class="customer-stat-card">
+              <span>Package</span>
+              <strong>${escapeHtml(lookup.customer.packageName || "-")}</strong>
+              <p>${escapeHtml(lookup.customer.connectionType || "-")}</p>
+            </article>
+            <article class="customer-stat-card">
+              <span>Due Date</span>
+              <strong>${escapeHtml(formatDate(lookup.customer.dueDate))}</strong>
+              <p>Billing reminder date</p>
+            </article>
+            <article class="customer-stat-card">
+              <span>Expiry</span>
+              <strong>${escapeHtml(formatDate(lookup.customer.expiryDate))}</strong>
+              <p>Current service validity</p>
+            </article>
+            <article class="customer-stat-card">
+              <span>Support</span>
+              <strong>${escapeHtml(lookup.operator.supportMobile || "-")}</strong>
+              <p>Operator helpline</p>
+            </article>
+          </section>
+
+          <section class="customer-content-grid">
+            <article class="customer-panel payment-panel">
+              <div class="customer-panel-head">
+                <div>
+                  <p class="eyebrow">QR Payment</p>
+                  <h3>Pay and submit confirmation</h3>
+                </div>
+              </div>
+              <div class="customer-payment-grid">
+                <div class="customer-qr-block">
+                  ${lookup.operator.qrImageUrl
+                    ? `<img class="qr-preview premium-qr" src="${escapeHtml(lookup.operator.qrImageUrl)}" alt="Operator QR" />`
+                    : `<div class="empty-state">QR image abhi set nahi hai. UPI ID: <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong></div>`}
+                  <div class="customer-upi-card">
+                    <span>UPI ID</span>
+                    <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong>
+                  </div>
+                </div>
+                <div class="customer-payment-form-wrap">
+                  <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
+                  <form id="publicPaymentSubmitForm" class="form-grid">
+                    <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.portalId)}" />
+                    <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
+                    <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
+                    <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
+                    <button class="primary-btn" type="submit">Submit Payment Confirmation</button>
+                  </form>
+                </div>
+              </div>
+            </article>
+
+            <article class="customer-panel">
+              <div class="customer-panel-head">
+                <div>
+                  <p class="eyebrow">Recent Payments</p>
+                  <h3>Posted payment history</h3>
+                </div>
+              </div>
+              <div class="customer-history-list">
+                ${(lookup.payments || []).length
+                  ? (lookup.payments || []).map((item) => `
+                    <article class="customer-history-card">
+                      <div>
+                        <strong>${escapeHtml(formatDate(item.paymentDate))}</strong>
+                        <p>${escapeHtml(item.receiptNumber || "-")}</p>
+                      </div>
+                      <div class="customer-history-value">
+                        <strong>${formatMoney(item.amountPaid)}</strong>
+                        <span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span>
+                      </div>
+                    </article>
+                  `).join("")
+                  : `<div class="empty-state">No payment history yet.</div>`}
+              </div>
+            </article>
+
+            <article class="customer-panel">
+              <div class="customer-panel-head">
+                <div>
+                  <p class="eyebrow">Submitted Requests</p>
+                  <h3>Pending and approved confirmations</h3>
+                </div>
+              </div>
+              <div class="customer-history-list">
+                ${(lookup.paymentRequests || []).length
+                  ? (lookup.paymentRequests || []).map((item) => `
+                    <article class="customer-history-card">
+                      <div>
+                        <strong>${escapeHtml(formatDate(item.paidAt || item.createdAt))}</strong>
+                        <p>${escapeHtml(item.utrNumber || "No UTR")}</p>
+                      </div>
+                      <div class="customer-history-value">
+                        <strong>${formatMoney(item.amount)}</strong>
+                        <span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span>
+                      </div>
+                    </article>
+                  `).join("")
+                  : `<div class="empty-state">No payment requests yet.</div>`}
+              </div>
+            </article>
+          </section>
+        ` : ""}
       </div>
     </div>
   `;
