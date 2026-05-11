@@ -12,14 +12,14 @@ const storageKey = "cableops_session";
 
 const operatorMenu = [
   { key: "dashboard", title: "Dashboard", description: "Overview and quick stats" },
-  { key: "customers", title: "Customers", description: "Add and manage customers" },
-  { key: "packages", title: "Packages", description: "Manage plans and pricing" },
-  { key: "payments", title: "Payments", description: "Collect payment and receipts" },
-  { key: "recharge", title: "Recharge", description: "Renew and extend validity" },
-  { key: "reports", title: "Reports", description: "Collections and defaulter summary" },
+  { key: "customers", title: "Customers", description: "Profiles and lifecycle" },
+  { key: "packages", title: "Packages", description: "Plans and pricing" },
+  { key: "payments", title: "Payments", description: "Collections and receipts" },
+  { key: "recharge", title: "Recharge", description: "Renewals and validity" },
+  { key: "reports", title: "Reports", description: "Collections and due summary" },
   { key: "staff", title: "Staff", description: "Team and permissions" },
-  { key: "expenses", title: "Expenses", description: "Track operational cost" },
-  { key: "settings", title: "Settings", description: "Operator profile and billing rules" },
+  { key: "expenses", title: "Expenses", description: "Operational cost" },
+  { key: "settings", title: "Settings", description: "Brand and billing rules" },
 ];
 
 const state = {
@@ -124,37 +124,31 @@ function renderLogin(message = "") {
     <div class="auth-shell">
       <div class="auth-card">
         <section class="auth-brand">
-          <p class="eyebrow">CableOps Secure Access</p>
-          <h1>Production-style admin and operator login.</h1>
+          <p class="eyebrow">CableOps Access</p>
+          <h1>Built for high-volume cable and internet operations.</h1>
           <p class="lede">
-            Admin ko sirf operator management panel milega. Operator ko apna working portal milega jahan wo customers, packages, billing, recharge, expenses aur reports manage karega.
+            Clean control for subscriptions, collections, customer records, packages, recharge flows, team access, and day-to-day operations.
           </p>
           <div class="auth-points">
-            <div class="auth-point">Separate admin and operator panels</div>
-            <div class="auth-point">Working operator sections with forms</div>
-            <div class="auth-point">JWT login and protected API</div>
-          </div>
-          <div class="demo-credentials">
-            <strong>Demo accounts</strong>
-            <p>Admin: owner@cableops.in / admin123</p>
-            <p>Operator: demo.operator@cableops.in / demo12345</p>
-            <p>URL: http://localhost:4173</p>
+            <div class="auth-point">Revenue, billing and due visibility in one place</div>
+            <div class="auth-point">Protected access with dedicated workspaces</div>
+            <div class="auth-point">Fast actions for customer, recharge and collection teams</div>
           </div>
         </section>
         <section class="auth-form">
-          <p class="eyebrow">Login</p>
-          <h2>Welcome back</h2>
+          <p class="eyebrow">Secure Login</p>
+          <h2>Sign in to continue</h2>
           ${message ? `<div class="feedback error">${message}</div>` : ""}
           <form id="loginForm" class="form-grid">
             <label>
               Email
-              <input name="email" type="email" value="demo.operator@cableops.in" required />
+              <input name="email" type="email" placeholder="name@company.com" required />
             </label>
             <label>
               Password
-              <input name="password" type="password" value="demo12345" required />
+              <input name="password" type="password" placeholder="Enter password" required />
             </label>
-            <button class="primary-btn" type="submit">Login</button>
+            <button class="primary-btn" type="submit">Sign In</button>
           </form>
         </section>
       </div>
@@ -186,8 +180,8 @@ function renderAdminShell(user) {
     <div class="page-shell">
       <div class="topbar">
         <div>
-          <p class="eyebrow">Platform Owner</p>
-          <h2>CableOps Admin Control</h2>
+          <p class="eyebrow">CableOps</p>
+          <h2>Admin Control</h2>
           <div class="topbar-meta">${user.name} | ${user.email}</div>
         </div>
         <div class="inline-actions">
@@ -199,10 +193,10 @@ function renderAdminShell(user) {
 
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">SaaS Admin</p>
-          <h1>Manage operators, subscriptions, and access.</h1>
+          <p class="eyebrow">Control Center</p>
+          <h1>Manage accounts, access and commercial operations.</h1>
           <p class="lede">
-            Yahan se aap operator accounts banao aur unko software use karne ke liye credentials do.
+            Create accounts, control access, manage plans, and maintain platform-wide visibility.
           </p>
         </div>
         <div class="hero-panel">
@@ -277,8 +271,8 @@ function renderOperatorShell(user, tenant) {
     <div class="page-shell">
       <div class="topbar">
         <div>
-          <p class="eyebrow">Operator Workspace</p>
-          <h2>${tenant?.businessName || "Operator Panel"}</h2>
+          <p class="eyebrow">CableOps</p>
+          <h2>${tenant?.businessName || "Workspace"}</h2>
           <div class="topbar-meta">${user.name} | ${user.email}</div>
         </div>
         <div class="inline-actions">
@@ -291,8 +285,8 @@ function renderOperatorShell(user, tenant) {
       <div class="workspace-grid">
         <aside class="sidebar">
           <div class="sidebar-brand">
-            <p class="eyebrow">Operator Menu</p>
-            <h3>Manage Business</h3>
+            <p class="eyebrow">Navigation</p>
+            <h3>Business Suite</h3>
           </div>
           <nav id="operatorNav" class="nav-list"></nav>
         </aside>
@@ -300,10 +294,10 @@ function renderOperatorShell(user, tenant) {
         <section class="workspace-main">
           <header class="hero">
             <div class="hero-copy">
-              <p class="eyebrow">Operator Panel</p>
-              <h1>${tenant?.businessName || "Operator Dashboard"}</h1>
+              <p class="eyebrow">Operations</p>
+              <h1>${tenant?.businessName || "Business Dashboard"}</h1>
               <p class="lede">
-                Daily collection, due customers, packages, recharge aur team ka kaam yahin se handle karo.
+                Collections, due tracking, package control, recharge flow, customer records and team operations in one premium workspace.
               </p>
             </div>
             <div class="hero-panel">
