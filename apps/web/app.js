@@ -311,21 +311,13 @@ function renderOperatorNav() {
   nav.innerHTML = operatorMenu
     .map(
       (item) => `
-        <button class="nav-item ${state.operatorView === item.key ? "active-nav" : ""}" data-view="${item.key}">
+        <button type="button" class="nav-item ${state.operatorView === item.key ? "active-nav" : ""}" data-view="${item.key}">
           <strong>${item.title}</strong>
           <span>${item.description}</span>
         </button>
       `,
     )
     .join("");
-
-  nav.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.operatorView = button.dataset.view;
-      renderOperatorNav();
-      renderOperatorView();
-    });
-  });
 }
 
 function tableWrapper(inner) {
@@ -525,6 +517,52 @@ function renderPackageOptions(items) {
   return items.map((item) => `<option value="${item.id}">${item.name} | ${formatMoney(item.price)}</option>`).join("");
 }
 
+function renderPaymentCards(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi tak koi payment record nahi hai.</div>`;
+  }
+
+  return items
+    .map(
+      (item) => `
+        <article class="stack-card">
+          <div>
+            <strong>${item.customerName}</strong>
+            <p>${item.receiptNumber} | ${item.paymentMode} | ${item.paymentDate}</p>
+          </div>
+          <div>
+            <strong>${formatMoney(item.amountPaid)}</strong>
+            <p><span class="badge ${badgeClass(item.status)}">${item.status}</span></p>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderRechargeCards(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi tak koi recharge record nahi hai.</div>`;
+  }
+
+  return items
+    .map(
+      (item) => `
+        <article class="stack-card">
+          <div>
+            <strong>${item.customerName}</strong>
+            <p>${item.mode} | Old: ${item.oldExpiryDate || "-"} | New: ${item.newExpiryDate || "-"}</p>
+          </div>
+          <div>
+            <strong>${formatMoney(item.amount)}</strong>
+            <p><span class="badge ${badgeClass(item.status)}">${item.status}</span></p>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function renderCustomerTable(items) {
   return `
     <table>
@@ -681,6 +719,82 @@ function attachCommonEvents() {
   });
 }
 
+async function handleOperatorAction(action, id) {
+  if (action === "edit-customer") {
+    const customer = state.data.customers.find((item) => item.id === id);
+    if (!customer) return;
+    const name = window.prompt("Customer name", customer.name);
+    const mobile = window.prompt("Mobile", customer.mobile);
+    const area = window.prompt("Area", customer.area || "");
+    const dueAmount = window.prompt("Due amount", customer.dueAmount);
+    if (!name || !mobile) return;
+    await fetchJson(`/customers/${customer.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name, mobile, area, dueAmount: Number(dueAmount || 0) }),
+    });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Customer updated.");
+    return;
+  }
+
+  if (action === "assign-package") {
+    const customer = state.data.customers.find((item) => item.id === id);
+    if (!customer) return;
+    const packageId = window.prompt(
+      `Package ID enter karo:\n${state.data.packages.map((pkg) => `${pkg.id} = ${pkg.name}`).join("\n")}`,
+      customer.packageId || "",
+    );
+    if (!packageId) return;
+    await fetchJson(`/customers/${customer.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ packageId }),
+    });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Package assigned to customer.");
+    return;
+  }
+
+  if (action === "delete-customer") {
+    if (!window.confirm("Delete this customer?")) return;
+    await fetchJson(`/customers/${id}`, { method: "DELETE" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Customer deleted.");
+    return;
+  }
+
+  if (action === "edit-package") {
+    const item = state.data.packages.find((pkg) => pkg.id === id);
+    if (!item) return;
+    const name = window.prompt("Package name", item.name);
+    const price = window.prompt("Price", item.price);
+    const validityDays = window.prompt("Validity days", item.validityDays);
+    if (!name || !price) return;
+    await fetchJson(`/packages/${item.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name, price: Number(price), validityDays: Number(validityDays || 30) }),
+    });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Package updated.");
+    return;
+  }
+
+  if (action === "delete-package") {
+    if (!window.confirm("Delete this package?")) return;
+    try {
+      await fetchJson(`/packages/${id}`, { method: "DELETE" });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Package deleted.");
+    } catch (_error) {
+      showStatus("Package assigned hai, pehle customers reassign karo.", "error");
+    }
+  }
+}
+
 function attachOperatorSectionEvents() {
   const customerForm = document.getElementById("customerForm");
   if (customerForm) {
@@ -787,86 +901,22 @@ function attachOperatorSectionEvents() {
     });
   }
 
-  document.querySelectorAll("[data-action='edit-customer']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const customer = state.data.customers.find((item) => item.id === button.dataset.id);
-      if (!customer) return;
-      const name = window.prompt("Customer name", customer.name);
-      const mobile = window.prompt("Mobile", customer.mobile);
-      const area = window.prompt("Area", customer.area || "");
-      const dueAmount = window.prompt("Due amount", customer.dueAmount);
-      if (!name || !mobile) return;
-      await fetchJson(`/customers/${customer.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ name, mobile, area, dueAmount: Number(dueAmount || 0) }),
-      });
-      await loadOperatorData();
-      renderOperatorView();
-      showStatus("Customer updated.");
-    });
-  });
-
-  document.querySelectorAll("[data-action='assign-package']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const customer = state.data.customers.find((item) => item.id === button.dataset.id);
-      if (!customer) return;
-      const packageId = window.prompt(
-        `Package ID enter karo:\n${state.data.packages.map((pkg) => `${pkg.id} = ${pkg.name}`).join("\n")}`,
-        customer.packageId || "",
-      );
-      if (!packageId) return;
-      await fetchJson(`/customers/${customer.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ packageId }),
-      });
-      await loadOperatorData();
-      renderOperatorView();
-      showStatus("Package assigned to customer.");
-    });
-  });
-
-  document.querySelectorAll("[data-action='delete-customer']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!window.confirm("Delete this customer?")) return;
-      await fetchJson(`/customers/${button.dataset.id}`, { method: "DELETE" });
-      await loadOperatorData();
-      renderOperatorView();
-      showStatus("Customer deleted.");
-    });
-  });
-
-  document.querySelectorAll("[data-action='edit-package']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const item = state.data.packages.find((pkg) => pkg.id === button.dataset.id);
-      if (!item) return;
-      const name = window.prompt("Package name", item.name);
-      const price = window.prompt("Price", item.price);
-      const validityDays = window.prompt("Validity days", item.validityDays);
-      if (!name || !price) return;
-      await fetchJson(`/packages/${item.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ name, price: Number(price), validityDays: Number(validityDays || 30) }),
-      });
-      await loadOperatorData();
-      renderOperatorView();
-      showStatus("Package updated.");
-    });
-  });
-
-  document.querySelectorAll("[data-action='delete-package']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!window.confirm("Delete this package?")) return;
-      try {
-        await fetchJson(`/packages/${button.dataset.id}`, { method: "DELETE" });
-        await loadOperatorData();
-        renderOperatorView();
-        showStatus("Package deleted.");
-      } catch (_error) {
-        showStatus("Package assigned hai, pehle customers reassign karo.", "error");
-      }
-    });
-  });
 }
+
+document.addEventListener("click", async (event) => {
+  const navButton = event.target.closest("#operatorNav [data-view]");
+  if (navButton) {
+    state.operatorView = navButton.dataset.view;
+    renderOperatorNav();
+    renderOperatorView();
+    return;
+  }
+
+  const actionButton = event.target.closest(".action-btn[data-action]");
+  if (actionButton) {
+    await handleOperatorAction(actionButton.dataset.action, actionButton.dataset.id);
+  }
+});
 
 function renderAppShell() {
   const session = getSession();
