@@ -1,0 +1,9 @@
+{
+  "name": "@cableops/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node -e \"console.log('Open apps/web/index.html in a browser or deploy apps/web as a static site on Render')\"",
+    "build": "node -e \"console.log('Web build step placeholder')\""
+  }
+}

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: cableops-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm run start:api
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: CORS_ORIGIN
+        value: https://cableops-web.onrender.com
+      - key: DATABASE_URL
+        sync: false
+
+  - type: static
+    name: cableops-web
+    rootDir: apps/web
+    buildCommand: ""
+    publishPath: .

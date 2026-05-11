@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                 String         @id
+  code               String         @unique
+  businessName       String
+  ownerName          String
+  plan               String
+  subscriptionStatus String
+  city               String?
+  mobile             String?
+  activeCustomers    Int            @default(0)
+  staffCount         Int            @default(0)
+  smsCredits         Int            @default(0)
+  monthlyCollection  Float          @default(0)
+  users              User[]
+  customers          Customer[]
+  packages           Package[]
+  payments           Payment[]
+  recharges          Recharge[]
+  staffMembers       StaffMember[]
+  expenses           Expense[]
+  settings           TenantSetting?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model User {
+  id           String   @id
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+  name         String
+  email        String   @unique
+  mobile       String?
+  passwordHash String
+  role         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Package {
+  id           String     @id
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  name         String
+  type         String
+  price        Float
+  validityDays Int        @default(30)
+  customers    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Customer {
+  id             String   @id
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  customerCode   String
+  name           String
+  mobile         String
+  area           String?
+  status         String   @default("active")
+  packageId      String?
+  packageName    String?
+  dueAmount      Float    @default(0)
+  dueDate        String?
+  expiryDate     String?
+  connectionType String   @default("both")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, customerCode])
+}
+
+model Payment {
+  id            String   @id
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  customerId    String
+  receiptNumber String   @unique
+  customerName  String
+  amountPaid    Float
+  paymentMode   String
+  paymentDate   String
+  status        String
+  createdAt     DateTime @default(now())
+}
+
+model Recharge {
+  id            String   @id
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  customerId    String
+  customerName  String
+  mode          String
+  status        String
+  amount        Float
+  oldExpiryDate String?
+  newExpiryDate String?
+  createdAt     DateTime @default(now())
+}
+
+model StaffMember {
+  id        String   @id
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  mobile    String
+  role      String
+  status    String
+  createdAt DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  title       String
+  category    String
+  amount      Float
+  expenseDate String
+  createdAt   DateTime @default(now())
+}
+
+model TenantSetting {
+  tenantId       String  @id
+  tenant         Tenant  @relation(fields: [tenantId], references: [id])
+  companyName    String?
+  billingDay     Int     @default(1)
+  lateFee        Float   @default(0)
+  supportMobile  String?
+  address        String?
+}
