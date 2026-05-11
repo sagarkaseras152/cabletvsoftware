@@ -68,6 +68,12 @@ function isCustomerPortalMode() {
   return window.location.hash.startsWith("#customer-pay");
 }
 
+function getCustomerPortalIdFromHash() {
+  const raw = window.location.hash || "";
+  const match = raw.match(/^#customer-pay\/(.+)$/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 function getSession() {
   const raw = localStorage.getItem(storageKey);
   return raw ? JSON.parse(raw) : null;
@@ -396,6 +402,7 @@ function renderLogin(message = "") {
 
 function renderPublicCustomerPaymentPortal(message = "", messageType = "error") {
   const lookup = state.publicPayment.lookup;
+  const portalCustomerId = getCustomerPortalIdFromHash();
   appRoot.innerHTML = `
     <div class="auth-shell">
       <div class="auth-card">
@@ -411,25 +418,57 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
           <h2>Find your account</h2>
           ${message ? `<div class="feedback ${messageType}">${message}</div>` : ""}
           <form id="publicPaymentLookupForm" class="form-grid">
-            <label>Operator Code<input name="operatorCode" value="${escapeHtml(state.publicPayment.operatorCode)}" placeholder="Example: DEMOOP1" required /></label>
-            <label>Customer Mobile / Code<input name="customerRef" value="${escapeHtml(state.publicPayment.customerRef)}" placeholder="Mobile ya customer code" required /></label>
-            <button class="primary-btn" type="submit">Show Payment QR</button>
+            <label>Customer Portal ID<input name="customerId" value="${escapeHtml(portalCustomerId || state.publicPayment.customerRef)}" placeholder="Unique customer portal ID" required /></label>
+            <button class="primary-btn" type="submit">Open Customer Portal</button>
           </form>
           ${lookup ? `
             <div class="inline-form-block public-payment-card">
-              <p class="eyebrow">Operator Payment</p>
+              <p class="eyebrow">Customer Portal</p>
               <h3>${escapeHtml(lookup.operator.paymentDisplayName || lookup.operator.businessName)}</h3>
-              <p class="subtle-note">${escapeHtml(lookup.customer.name)} | ${escapeHtml(lookup.customer.mobile)} | Due ${formatMoney(lookup.customer.dueAmount)}</p>
+              <p class="subtle-note">${escapeHtml(lookup.customer.name)} | ${escapeHtml(lookup.customer.mobile)} | Portal ID ${escapeHtml(lookup.customer.portalId)}</p>
+              <div class="import-summary-grid">
+                <article class="menu-card"><h3>Package</h3><p>${escapeHtml(lookup.customer.packageName || "-")}</p></article>
+                <article class="menu-card"><h3>Due</h3><p>${formatMoney(lookup.customer.dueAmount || 0)}</p></article>
+                <article class="menu-card"><h3>Due Date</h3><p>${escapeHtml(formatDate(lookup.customer.dueDate))}</p></article>
+                <article class="menu-card"><h3>Status</h3><p>${escapeHtml(lookup.customer.status || "-")}</p></article>
+              </div>
               ${lookup.operator.qrImageUrl ? `<img class="qr-preview" src="${escapeHtml(lookup.operator.qrImageUrl)}" alt="Operator QR" />` : `<div class="empty-state">QR image abhi set nahi hai. UPI ID: <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong></div>`}
               <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
               <form id="publicPaymentSubmitForm" class="form-grid">
-                <input type="hidden" name="operatorCode" value="${escapeHtml(state.publicPayment.operatorCode)}" />
-                <input type="hidden" name="customerRef" value="${escapeHtml(state.publicPayment.customerRef)}" />
+                <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.id)}" />
                 <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
                 <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
                 <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
                 <button class="primary-btn" type="submit">Submit Payment Confirmation</button>
               </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Recent Payments</th><th>Amount</th><th>Status</th></tr></thead>
+                  <tbody>
+                    ${(lookup.payments || []).map((item) => `
+                      <tr>
+                        <td>${escapeHtml(formatDate(item.paymentDate))}<br /><span class="subtle-note">${escapeHtml(item.receiptNumber || "-")}</span></td>
+                        <td>${formatMoney(item.amountPaid)}</td>
+                        <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
+                      </tr>
+                    `).join("") || `<tr><td colspan="3">No payment history yet.</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Pending Requests</th><th>Amount</th><th>Status</th></tr></thead>
+                  <tbody>
+                    ${(lookup.paymentRequests || []).map((item) => `
+                      <tr>
+                        <td>${escapeHtml(formatDate(item.paidAt || item.createdAt))}<br /><span class="subtle-note">${escapeHtml(item.utrNumber || "-")}</span></td>
+                        <td>${formatMoney(item.amount)}</td>
+                        <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
+                      </tr>
+                    `).join("") || `<tr><td colspan="3">No payment requests yet.</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ` : ""}
           <div class="toolbar">
@@ -443,17 +482,16 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
   document.getElementById("publicPaymentLookupForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    state.publicPayment.operatorCode = String(formData.get("operatorCode") || "").trim().toUpperCase();
-    state.publicPayment.customerRef = String(formData.get("customerRef") || "").trim();
+    state.publicPayment.customerRef = String(formData.get("customerId") || "").trim();
     try {
       const response = await fetchJson("/public/payment-lookup", {
         method: "POST",
         body: JSON.stringify({
-          operatorCode: state.publicPayment.operatorCode,
-          customerRef: state.publicPayment.customerRef,
+          customerId: state.publicPayment.customerRef,
         }),
       });
       state.publicPayment.lookup = response;
+      window.location.hash = `#customer-pay/${encodeURIComponent(response.customer.id)}`;
       renderPublicCustomerPaymentPortal();
     } catch (error) {
       renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Customer lookup fail ho gaya."), "error");
@@ -470,7 +508,8 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
           method: "POST",
           body: JSON.stringify(Object.fromEntries(formData.entries())),
         });
-        state.publicPayment.lookup = null;
+        const fresh = await fetchJson(`/public/customer-portal/${lookup.customer.id}`);
+        state.publicPayment.lookup = fresh;
         renderPublicCustomerPaymentPortal("Payment request submit ho gaya. Operator approval ke baad software me auto entry ho jayegi.", "success");
       } catch (error) {
         renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Payment request submit nahi hua."), "error");
@@ -480,6 +519,7 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
 
   document.getElementById("backToLoginBtn").addEventListener("click", () => {
     state.publicPayment.lookup = null;
+    state.publicPayment.customerRef = "";
     window.location.hash = "";
     renderLogin();
   });
@@ -1365,7 +1405,7 @@ function renderExpiringCards(items) {
 function renderCustomerTable(items) {
   return `
     <table>
-      <thead><tr><th>Name</th><th>Mobile</th><th>Area</th><th>Package</th><th>Status</th><th>Due</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Mobile</th><th>Portal ID</th><th>Area</th><th>Package</th><th>Status</th><th>Due</th><th>Actions</th></tr></thead>
       <tbody>
         ${items
           .map(
@@ -1373,11 +1413,13 @@ function renderCustomerTable(items) {
               <tr>
                 <td>${item.name}</td>
                 <td>${item.mobile}</td>
+                <td>${item.id}</td>
                 <td>${item.area || "-"}</td>
                 <td>${item.packageName || "-"}</td>
                 <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
                 <td>${formatMoney(item.dueAmount)}</td>
                 <td>
+                  <button class="ghost-btn action-btn" data-action="copy-customer-portal" data-id="${item.id}">Portal Link</button>
                   <button class="ghost-btn action-btn" data-action="edit-customer" data-id="${item.id}">Edit</button>
                   <button class="ghost-btn action-btn" data-action="assign-package" data-id="${item.id}">Assign</button>
                   <button class="ghost-btn action-btn" data-action="delete-customer" data-id="${item.id}">Delete</button>
@@ -1677,6 +1719,20 @@ async function handleOperatorAction(action, id) {
     renderOperatorNav();
     renderOperatorView();
     showStatus("Customer selected for payment collection.", "success");
+    return;
+  }
+
+  if (action === "copy-customer-portal") {
+    const customer = state.data.customers.find((item) => item.id === id);
+    if (!customer) return;
+    const portalLink = `${window.location.origin}${window.location.pathname}#customer-pay/${encodeURIComponent(customer.id)}`;
+    const shareText = `${portalLink}\nCustomer Portal ID: ${customer.id}`;
+    try {
+      await navigator.clipboard.writeText(shareText);
+      showStatus("Customer portal link copied.");
+    } catch {
+      showStatus(shareText);
+    }
     return;
   }
 

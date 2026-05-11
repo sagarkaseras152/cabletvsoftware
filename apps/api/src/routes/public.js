@@ -3,34 +3,32 @@ import { prisma } from "../db.js";
 
 const router = Router();
 
-router.post("/payment-lookup", async (req, res) => {
-  const { operatorCode = "", customerRef = "" } = req.body || {};
-  const normalizedOperatorCode = String(operatorCode).trim().toUpperCase();
-  const normalizedCustomerRef = String(customerRef).trim();
-
-  if (!normalizedOperatorCode || !normalizedCustomerRef) {
-    return res.status(400).json({ ok: false, message: "operatorCode and customerRef are required" });
-  }
-
-  const tenant = await prisma.tenant.findFirst({
-    where: { code: normalizedOperatorCode },
-    include: { settings: true },
-  });
-  if (!tenant) return res.status(404).json({ ok: false, message: "Operator not found" });
-
+async function buildCustomerPortalPayload(customerId) {
   const customer = await prisma.customer.findFirst({
-    where: {
-      tenantId: tenant.id,
-      OR: [
-        { mobile: normalizedCustomerRef },
-        { customerCode: normalizedCustomerRef },
-      ],
-    },
+    where: { id: customerId },
   });
-  if (!customer) return res.status(404).json({ ok: false, message: "Customer not found for this operator" });
+  if (!customer) return null;
 
-  res.json({
-    ok: true,
+  const [tenant, payments, paymentRequests] = await Promise.all([
+    prisma.tenant.findFirst({
+      where: { id: customer.tenantId },
+      include: { settings: true },
+    }),
+    prisma.payment.findMany({
+      where: { tenantId: customer.tenantId, customerId: customer.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+    prisma.paymentRequest.findMany({
+      where: { tenantId: customer.tenantId, customerId: customer.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+  ]);
+
+  if (!tenant) return null;
+
+  return {
     operator: {
       code: tenant.code,
       businessName: tenant.businessName,
@@ -42,45 +40,60 @@ router.post("/payment-lookup", async (req, res) => {
     },
     customer: {
       id: customer.id,
+      portalId: customer.id,
       customerCode: customer.customerCode,
       name: customer.name,
       mobile: customer.mobile,
+      area: customer.area,
       packageName: customer.packageName,
+      connectionType: customer.connectionType,
       dueAmount: customer.dueAmount,
       dueDate: customer.dueDate,
+      expiryDate: customer.expiryDate,
+      status: customer.status,
     },
-  });
+    payments,
+    paymentRequests,
+  };
+}
+
+router.get("/customer-portal/:customerId", async (req, res) => {
+  const payload = await buildCustomerPortalPayload(req.params.customerId);
+  if (!payload) return res.status(404).json({ ok: false, message: "Customer portal not found" });
+
+  res.json({ ok: true, ...payload });
+});
+
+router.post("/payment-lookup", async (req, res) => {
+  const { customerId = "", customerRef = "" } = req.body || {};
+  const portalId = String(customerId || customerRef || "").trim();
+  if (!portalId) {
+    return res.status(400).json({ ok: false, message: "customerId is required" });
+  }
+
+  const payload = await buildCustomerPortalPayload(portalId);
+  if (!payload) return res.status(404).json({ ok: false, message: "Customer portal not found" });
+
+  res.json({ ok: true, ...payload });
 });
 
 router.post("/payment-request", async (req, res) => {
-  const { operatorCode = "", customerRef = "", amount = 0, utrNumber = "", note = "" } = req.body || {};
-  const normalizedOperatorCode = String(operatorCode).trim().toUpperCase();
-  const normalizedCustomerRef = String(customerRef).trim();
+  const { customerId = "", amount = 0, utrNumber = "", note = "" } = req.body || {};
+  const normalizedCustomerId = String(customerId).trim();
   const normalizedUtr = String(utrNumber || "").trim();
   const amountNumber = Number(amount || 0);
 
-  if (!normalizedOperatorCode || !normalizedCustomerRef || !amountNumber) {
-    return res.status(400).json({ ok: false, message: "operatorCode, customerRef and amount are required" });
+  if (!normalizedCustomerId || !amountNumber) {
+    return res.status(400).json({ ok: false, message: "customerId and amount are required" });
   }
 
-  const tenant = await prisma.tenant.findFirst({ where: { code: normalizedOperatorCode } });
-  if (!tenant) return res.status(404).json({ ok: false, message: "Operator not found" });
-
-  const customer = await prisma.customer.findFirst({
-    where: {
-      tenantId: tenant.id,
-      OR: [
-        { mobile: normalizedCustomerRef },
-        { customerCode: normalizedCustomerRef },
-      ],
-    },
-  });
-  if (!customer) return res.status(404).json({ ok: false, message: "Customer not found for this operator" });
+  const customer = await prisma.customer.findFirst({ where: { id: normalizedCustomerId } });
+  if (!customer) return res.status(404).json({ ok: false, message: "Customer portal not found" });
 
   if (normalizedUtr) {
     const existingRequest = await prisma.paymentRequest.findFirst({
       where: {
-        tenantId: tenant.id,
+        tenantId: customer.tenantId,
         utrNumber: normalizedUtr,
         status: { in: ["pending", "approved"] },
       },
@@ -93,7 +106,7 @@ router.post("/payment-request", async (req, res) => {
   const requestItem = await prisma.paymentRequest.create({
     data: {
       id: `preq-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      tenantId: tenant.id,
+      tenantId: customer.tenantId,
       customerId: customer.id,
       customerName: customer.name,
       customerMobile: customer.mobile,
