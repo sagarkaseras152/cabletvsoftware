@@ -1,6 +1,7 @@
 import { Router } from "express";
 import acsRouter from "./acs.js";
 import authRouter from "./auth.js";
+import backupRouter from "./backup.js";
 import blueprintRouter from "./blueprint.js";
 import customersRouter from "./customers.js";
 import expensesRouter from "./expenses.js";
@@ -19,6 +20,7 @@ import staffRouter from "./staff.js";
 const router = Router();
 
 router.use("/auth", authRouter);
+router.use("/backup", backupRouter);
 router.use("/health", healthRouter);
 router.use("/acs", acsRouter);
 router.use("/blueprint", blueprintRouter);
@@ -43,6 +45,7 @@ router.get("/", (_req, res) => {
       overview: "/api/blueprint/overview",
       modules: "/api/blueprint/modules",
       auth: "/api/auth/login",
+      backup: "/api/backup/export",
       operators: "/api/operators",
       customers: "/api/customers",
       packages: "/api/packages",

@@ -557,6 +557,11 @@ function renderAdminFormPanel() {
         <h2>${isEdit ? "Edit Business Account" : "Create Business Account"}</h2>
       </div>
       <div class="toolbar">
+        <button type="button" id="exportBackupBtn" class="ghost-btn">Export Backup</button>
+        <label class="ghost-btn backup-upload-btn">
+          Import Backup
+          <input id="importBackupFile" type="file" accept=".json,application/json" hidden />
+        </label>
         ${isEdit ? `<button type="button" id="adminCreateNewBtn" class="ghost-btn">Create New</button>` : ""}
       </div>
     </div>
@@ -649,6 +654,48 @@ function attachAdminFormEvents() {
       }
       const detail = document.getElementById("adminOperatorDetail");
       if (detail) detail.innerHTML = renderAdminEmptyState();
+    });
+  }
+
+  const exportBackupBtn = document.getElementById("exportBackupBtn");
+  if (exportBackupBtn) {
+    exportBackupBtn.addEventListener("click", async () => {
+      try {
+        const response = await fetchJson("/backup/export");
+        const blob = new Blob([JSON.stringify(response.snapshot, null, 2)], { type: "application/json;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `cableops-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+        showStatus("Full backup export ho gaya.");
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "Backup export fail ho gaya."), "error");
+      }
+    });
+  }
+
+  const importBackupFile = document.getElementById("importBackupFile");
+  if (importBackupFile) {
+    importBackupFile.addEventListener("change", async (event) => {
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const snapshot = JSON.parse(text);
+        const response = await fetchJson("/backup/import", {
+          method: "POST",
+          body: JSON.stringify({ snapshot }),
+        });
+        await hydrateDashboard();
+        showStatus(response.message || "Backup restore ho gaya.");
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "Backup import fail ho gaya."), "error");
+      } finally {
+        event.currentTarget.value = "";
+      }
     });
   }
 }
