@@ -24,6 +24,11 @@ const operatorMenu = [
 
 const state = {
   operatorView: "dashboard",
+  dashboardFilters: {
+    dueStart: "",
+    dueEnd: "",
+  },
+  quickPayCustomerId: "",
   data: {
     operators: [],
     customers: [],
@@ -79,6 +84,20 @@ function formatMoney(value) {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(value || 0);
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-IN");
+}
+
+function normalizeDateOnly(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function badgeClass(status) {
@@ -282,9 +301,9 @@ function renderOperatorShell(user, tenant) {
           <header class="hero">
             <div class="hero-copy">
               <p class="eyebrow">Operator Panel</p>
-              <h1>Working management software for daily operations.</h1>
+              <h1>${tenant?.businessName || "Operator Dashboard"}</h1>
               <p class="lede">
-                Customer add karo, package banao, payment collect karo, recharge karo, staff aur expenses manage karo.
+                Daily collection, due customers, packages, recharge aur team ka kaam yahin se handle karo.
               </p>
             </div>
             <div class="hero-panel">
@@ -327,17 +346,65 @@ function tableWrapper(inner) {
 function renderOperatorView() {
   const root = document.getElementById("operatorContent");
   const data = state.data;
+  const today = normalizeDateOnly(new Date());
+  const dueCustomers = data.customers
+    .filter((item) => Number(item.dueAmount || 0) > 0)
+    .filter((item) => {
+      const dueDate = normalizeDateOnly(item.dueDate);
+      if (!dueDate) return true;
+      if (state.dashboardFilters.dueStart && dueDate < state.dashboardFilters.dueStart) return false;
+      if (state.dashboardFilters.dueEnd && dueDate > state.dashboardFilters.dueEnd) return false;
+      return true;
+    })
+    .sort((a, b) => (normalizeDateOnly(a.dueDate) || "9999-12-31").localeCompare(normalizeDateOnly(b.dueDate) || "9999-12-31"));
+  const expiringCustomers = data.customers
+    .filter((item) => item.expiryDate)
+    .filter((item) => {
+      const expiry = normalizeDateOnly(item.expiryDate);
+      return expiry >= today;
+    })
+    .sort((a, b) => normalizeDateOnly(a.expiryDate).localeCompare(normalizeDateOnly(b.expiryDate)))
+    .slice(0, 8);
+  const activeCustomers = data.customers.filter((item) => item.status === "active").length;
+  const monthlyCollection = data.payments.reduce((sum, item) => sum + Number(item.amountPaid || 0), 0);
+  const pendingTotal = data.customers.reduce((sum, item) => sum + Number(item.dueAmount || 0), 0);
+  const todayCollections = data.payments
+    .filter((item) => normalizeDateOnly(item.paymentDate) === today)
+    .reduce((sum, item) => sum + Number(item.amountPaid || 0), 0);
 
   const views = {
     dashboard: `
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Dashboard</p><h2>Quick Overview</h2></div></div>
-        <div class="menu-grid">
-          <article class="menu-card"><h3>Total Customers</h3><p>${data.customers.length}</p></article>
-          <article class="menu-card"><h3>Total Packages</h3><p>${data.packages.length}</p></article>
-          <article class="menu-card"><h3>Total Payments</h3><p>${data.payments.length}</p></article>
-          <article class="menu-card"><h3>Total Expenses</h3><p>${formatMoney(data.expenses.reduce((sum, item) => sum + item.amount, 0))}</p></article>
+        <div class="section-head"><div><p class="eyebrow">Dashboard</p><h2>Main Overview</h2></div></div>
+        <div class="menu-grid dashboard-grid">
+          <article class="menu-card kpi-card"><h3>Total Customers</h3><p>${data.customers.length}</p><span>All registered customers</span></article>
+          <article class="menu-card kpi-card"><h3>Active Customers</h3><p>${activeCustomers}</p><span>Currently active connections</span></article>
+          <article class="menu-card kpi-card"><h3>Today's Collection</h3><p>${formatMoney(todayCollections)}</p><span>Collected on ${formatDate(today)}</span></article>
+          <article class="menu-card kpi-card"><h3>Pending Due</h3><p>${formatMoney(pendingTotal)}</p><span>${dueCustomers.length} customers pending</span></article>
+          <article class="menu-card kpi-card"><h3>Monthly Collection</h3><p>${formatMoney(monthlyCollection)}</p><span>Total collected amount</span></article>
+          <article class="menu-card kpi-card"><h3>Total Packages</h3><p>${data.packages.length}</p><span>Available active plans</span></article>
         </div>
+      </section>
+      <section class="panel">
+        <div class="section-head">
+          <div><p class="eyebrow">Due Payments</p><h2>Customer Due List</h2></div>
+          <div class="toolbar filter-toolbar">
+            <label class="compact-field">From<input id="dueStartFilter" type="date" value="${state.dashboardFilters.dueStart}" /></label>
+            <label class="compact-field">To<input id="dueEndFilter" type="date" value="${state.dashboardFilters.dueEnd}" /></label>
+            <button type="button" id="clearDueFilters" class="ghost-btn">Clear</button>
+          </div>
+        </div>
+        ${tableWrapper(renderDashboardDueTable(dueCustomers))}
+      </section>
+      <section class="split-grid dashboard-split">
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Expiring Soon</p><h2>Upcoming Expiry</h2></div></div>
+          <div class="stack-list">${renderExpiringCards(expiringCustomers)}</div>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Recent Payments</p><h2>Latest Collection</h2></div></div>
+          <div class="stack-list">${renderPaymentCards(data.payments.slice(0, 6))}</div>
+        </article>
       </section>
     `,
     customers: `
@@ -397,7 +464,7 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Payments</p><h2>Collect Payment</h2></div></div>
         <form id="paymentForm" class="form-grid two-col-grid">
           <label>Customer
-            <select name="customerId">${renderCustomerOptions(data.customers)}</select>
+            <select name="customerId">${renderCustomerOptions(data.customers, state.quickPayCustomerId)}</select>
           </label>
           <label>Amount Paid<input name="amountPaid" type="number" required /></label>
           <label>Payment Mode
@@ -509,8 +576,10 @@ function renderOperatorView() {
   attachOperatorSectionEvents();
 }
 
-function renderCustomerOptions(items) {
-  return items.map((item) => `<option value="${item.id}">${item.name} | ${item.mobile}</option>`).join("");
+function renderCustomerOptions(items, selectedId = "") {
+  return items
+    .map((item) => `<option value="${item.id}" ${selectedId === item.id ? "selected" : ""}>${item.name} | ${item.mobile}</option>`)
+    .join("");
 }
 
 function renderPackageOptions(items) {
@@ -556,6 +625,58 @@ function renderRechargeCards(items) {
           <div>
             <strong>${formatMoney(item.amount)}</strong>
             <p><span class="badge ${badgeClass(item.status)}">${item.status}</span></p>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderDashboardDueTable(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Selected filter me koi due customer nahi mila.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Customer</th><th>Mobile</th><th>Area</th><th>Package</th><th>Due Date</th><th>Due Amount</th><th>Action</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.name}</td>
+                <td>${item.mobile}</td>
+                <td>${item.area || "-"}</td>
+                <td>${item.packageName || "-"}</td>
+                <td>${formatDate(item.dueDate)}</td>
+                <td>${formatMoney(item.dueAmount)}</td>
+                <td><button type="button" class="primary-btn action-btn" data-action="quick-collect" data-id="${item.id}">Collect</button></td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderExpiringCards(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi koi near-expiry customer nahi hai.</div>`;
+  }
+
+  return items
+    .map(
+      (item) => `
+        <article class="stack-card">
+          <div>
+            <strong>${item.name}</strong>
+            <p>${item.mobile} | ${item.packageName || "No package"}</p>
+          </div>
+          <div>
+            <strong>${formatDate(item.expiryDate)}</strong>
+            <p>${item.area || "-"}</p>
           </div>
         </article>
       `,
@@ -720,6 +841,15 @@ function attachCommonEvents() {
 }
 
 async function handleOperatorAction(action, id) {
+  if (action === "quick-collect") {
+    state.quickPayCustomerId = id;
+    state.operatorView = "payments";
+    renderOperatorNav();
+    renderOperatorView();
+    showStatus("Customer selected for payment collection.", "success");
+    return;
+  }
+
   if (action === "edit-customer") {
     const customer = state.data.customers.find((item) => item.id === id);
     if (!customer) return;
@@ -796,6 +926,31 @@ async function handleOperatorAction(action, id) {
 }
 
 function attachOperatorSectionEvents() {
+  const dueStartFilter = document.getElementById("dueStartFilter");
+  if (dueStartFilter) {
+    dueStartFilter.addEventListener("change", (event) => {
+      state.dashboardFilters.dueStart = event.currentTarget.value;
+      renderOperatorView();
+    });
+  }
+
+  const dueEndFilter = document.getElementById("dueEndFilter");
+  if (dueEndFilter) {
+    dueEndFilter.addEventListener("change", (event) => {
+      state.dashboardFilters.dueEnd = event.currentTarget.value;
+      renderOperatorView();
+    });
+  }
+
+  const clearDueFilters = document.getElementById("clearDueFilters");
+  if (clearDueFilters) {
+    clearDueFilters.addEventListener("click", () => {
+      state.dashboardFilters.dueStart = "";
+      state.dashboardFilters.dueEnd = "";
+      renderOperatorView();
+    });
+  }
+
   const customerForm = document.getElementById("customerForm");
   if (customerForm) {
     customerForm.addEventListener("submit", async (event) => {
@@ -835,6 +990,7 @@ function attachOperatorSectionEvents() {
         method: "POST",
         body: JSON.stringify(Object.fromEntries(formData.entries())),
       });
+      state.quickPayCustomerId = "";
       await loadOperatorData();
       renderOperatorView();
       showStatus("Payment collected successfully.");

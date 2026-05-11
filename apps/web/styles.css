@@ -348,6 +348,19 @@ button,
   margin-bottom: 0;
 }
 
+.menu-card span {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kpi-card p {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .panel {
   padding: 24px;
 }
@@ -425,6 +438,10 @@ input[type="search"] {
   gap: 16px;
 }
 
+.dashboard-split {
+  align-items: start;
+}
+
 .stack-list {
   display: grid;
   gap: 12px;
@@ -432,6 +449,48 @@ input[type="search"] {
 
 .stack-item {
   padding: 16px;
+}
+
+.stack-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--card-strong);
+}
+
+.stack-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.empty-state {
+  padding: 18px;
+  border-radius: 16px;
+  background: #f7fbff;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+.filter-toolbar {
+  align-items: end;
+}
+
+.compact-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.compact-field input {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+  padding: 10px 12px;
 }
 
 .action-btn {
@@ -480,5 +539,9 @@ input[type="search"] {
 
   .sidebar {
     position: static;
+  }
+
+  .stack-card {
+    flex-direction: column;
   }
 }
