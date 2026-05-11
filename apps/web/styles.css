@@ -755,6 +755,11 @@ button:hover,
   min-width: 220px;
 }
 
+.customer-copy-upi-btn {
+  width: fit-content;
+  min-width: 220px;
+}
+
 .customer-history-list {
   display: grid;
   gap: 14px;

@@ -151,6 +151,25 @@ function buildUpiPaymentLink({ upiId = "", displayName = "", amount = 0, note = 
   return `upi://pay?${params.toString()}`;
 }
 
+async function copyText(text) {
+  if (!text) return false;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "readonly");
+  input.style.position = "absolute";
+  input.style.left = "-9999px";
+  document.body.appendChild(input);
+  input.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(input);
+  return ok;
+}
+
 function badgeClass(status) {
   const map = {
     active: "active",
@@ -528,18 +547,25 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
                     <span>UPI ID</span>
                     <strong>${escapeHtml(lookup.operator.upiId || "-")}</strong>
                   </div>
+                  <div class="customer-upi-card">
+                    <span>Amount to pay</span>
+                    <strong>${formatMoney(lookup.customer.dueAmount || 0)}</strong>
+                  </div>
                 </div>
                 <div class="customer-payment-form-wrap">
                   <p class="subtle-note">${escapeHtml(lookup.operator.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</p>
                   <div class="customer-payment-actions">
                     ${upiLink
-                      ? `<a class="primary-btn customer-pay-now-btn" href="${escapeHtml(upiLink)}">Pay via UPI App</a>`
+                      ? `<a class="primary-btn customer-pay-now-btn" id="customerPayNowBtn" href="${escapeHtml(upiLink)}">Pay via UPI App</a>`
                       : `<div class="empty-state">Operator ne abhi UPI ID set nahi ki hai.</div>`}
+                    ${lookup.operator.upiId
+                      ? `<button class="ghost-btn customer-copy-upi-btn" id="customerCopyUpiBtn" type="button">Copy UPI ID</button>`
+                      : ""}
                     <span class="subtle-note">Mobile me supported UPI app direct open ho sakti hai. Payment ke baad niche confirmation submit karein.</span>
                   </div>
                   <form id="publicPaymentSubmitForm" class="form-grid">
                     <input type="hidden" name="customerId" value="${escapeHtml(lookup.customer.portalId)}" />
-                    <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" required /></label>
+                    <label>Amount Paid<input name="amount" type="number" value="${lookup.customer.dueAmount || ""}" readonly required /></label>
                     <label>UTR / Transaction Ref<input name="utrNumber" placeholder="Optional but recommended" /></label>
                     <label>Note<input name="note" placeholder="Screenshot ya note reference" /></label>
                     <button class="primary-btn" type="submit">Submit Payment Confirmation</button>
@@ -628,10 +654,10 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
   }
 
   const publicPaymentSubmitForm = document.getElementById("publicPaymentSubmitForm");
-  if (publicPaymentSubmitForm) {
-    publicPaymentSubmitForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(event.currentTarget);
+    if (publicPaymentSubmitForm) {
+      publicPaymentSubmitForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
       try {
         await fetchJson("/public/payment-request", {
           method: "POST",
@@ -642,13 +668,25 @@ function renderPublicCustomerPaymentPortal(message = "", messageType = "error") 
         renderPublicCustomerPaymentPortal("Payment request submit ho gaya. Operator approval ke baad software me auto entry ho jayegi.", "success");
       } catch (error) {
         renderPublicCustomerPaymentPortal(parseErrorMessage(error, "Payment request submit nahi hua."), "error");
-      }
-    });
-  }
+        }
+      });
+    }
 
-  const backToLoginBtn = document.getElementById("backToLoginBtn");
-  if (backToLoginBtn) {
-    backToLoginBtn.addEventListener("click", () => {
+    const customerCopyUpiBtn = document.getElementById("customerCopyUpiBtn");
+    if (customerCopyUpiBtn) {
+      customerCopyUpiBtn.addEventListener("click", async () => {
+        try {
+          await copyText(lookup.operator.upiId);
+          renderPublicCustomerPaymentPortal("UPI ID copy ho gayi.", "success");
+        } catch (error) {
+          renderPublicCustomerPaymentPortal(parseErrorMessage(error, "UPI ID copy nahi hui."), "error");
+        }
+      });
+    }
+
+    const backToLoginBtn = document.getElementById("backToLoginBtn");
+    if (backToLoginBtn) {
+      backToLoginBtn.addEventListener("click", () => {
       state.publicPayment.lookup = null;
       state.publicPayment.customerRef = "";
       state.publicPayment.password = "123456";
