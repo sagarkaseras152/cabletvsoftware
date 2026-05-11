@@ -287,16 +287,6 @@ function renderOperatorShell(user, tenant) {
         </aside>
 
         <section class="workspace-main">
-          <header class="hero">
-            <div class="hero-copy">
-              <p class="eyebrow">Operations</p>
-              <h1>${tenant?.businessName || "Business Dashboard"}</h1>
-              <p class="lede">
-                Collections, due tracking, package control, recharge flow, customer records and team operations in one premium workspace.
-              </p>
-            </div>
-          </header>
-
           <div id="statusBox"></div>
           <div id="operatorContent" class="content-grid"></div>
         </section>
