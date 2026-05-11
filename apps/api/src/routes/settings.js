@@ -12,6 +12,12 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const payload = { ...(req.body || {}) };
+  ["companyName", "supportMobile", "address", "paymentDisplayName", "upiId", "qrImageUrl", "qrInstructions", "acsUsername", "acsPassword", "defaultAcsProfile", "defaultWifiSsidPath", "defaultWifiPasswordPath", "tr069TemplateName"]
+    .forEach((key) => {
+      if (payload[key] !== undefined && payload[key] !== null) {
+        payload[key] = String(payload[key]).trim();
+      }
+    });
   if (payload.billingDay !== undefined) payload.billingDay = Number(payload.billingDay || 1);
   if (payload.lateFee !== undefined) payload.lateFee = Number(payload.lateFee || 0);
   if (payload.defaultInformInterval !== undefined) payload.defaultInformInterval = Number(payload.defaultInformInterval || 300);

@@ -1323,14 +1323,14 @@ function renderOperatorView() {
     `,
     settings: `
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing and ACS Settings</h2></div></div>
+        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing, Payment and ACS Settings</h2></div></div>
         <form id="settingsForm" class="form-grid two-col-grid">
           <label>Firm Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
           <label>Support Mobile<input name="supportMobile" value="${data.settings?.supportMobile || ""}" /></label>
           <label>Billing Day<input name="billingDay" type="number" value="${data.settings?.billingDay || 1}" /></label>
           <label>Late Fee<input name="lateFee" type="number" value="${data.settings?.lateFee || 0}" /></label>
           <label>Address<input name="address" value="${data.settings?.address || ""}" /></label>
-          <label>Payment Display Name<input name="paymentDisplayName" value="${data.settings?.paymentDisplayName || ""}" /></label>
+          <label>Payment Display Name<input name="paymentDisplayName" value="${data.settings?.paymentDisplayName || ""}" placeholder="Customer portal heading" /></label>
           <label>UPI ID<input name="upiId" value="${data.settings?.upiId || ""}" placeholder="example@upi" /></label>
           <label>QR Image URL<input name="qrImageUrl" value="${data.settings?.qrImageUrl || ""}" placeholder="https://.../operator-qr.png" /></label>
           <label>QR Instructions<input name="qrInstructions" value="${data.settings?.qrInstructions || ""}" placeholder="Payment karne ke baad UTR submit karein" /></label>
@@ -1354,6 +1354,7 @@ function renderOperatorView() {
           </label>
           <div class="form-actions"><button class="primary-btn" type="submit">Save Settings</button></div>
         </form>
+        ${renderOperatorPaymentPreview(data.settings, getSession()?.tenant)}
         <div class="inline-form-block">
           <p class="eyebrow">Customer Payment Link</p>
           <p class="subtle-note">${escapeHtml(`${window.location.origin}${window.location.pathname}#customer-pay`)}</p>
@@ -1439,6 +1440,53 @@ function renderPaymentRequestTable(items) {
           .join("")}
       </tbody>
     </table>
+  `;
+}
+
+function renderOperatorPaymentPreview(settings, sessionTenant) {
+  const brand = settings?.paymentDisplayName || settings?.companyName || sessionTenant?.businessName || "Operator Payment";
+  const support = settings?.supportMobile || sessionTenant?.mobile || "-";
+  const upiId = settings?.upiId || "-";
+  const portalBase = `${window.location.origin}${window.location.pathname}#customer-pay/<customer-id>`;
+
+  return `
+    <div class="operator-payment-preview">
+      <div class="operator-payment-preview-head">
+        <div>
+          <p class="eyebrow">Customer Side Preview</p>
+          <h3>${escapeHtml(brand)}</h3>
+          <p class="subtle-note">Ye information customer portal me dikhengi jab customer login karega.</p>
+        </div>
+        <div class="operator-payment-badge">
+          <span>UPI</span>
+          <strong>${escapeHtml(upiId)}</strong>
+        </div>
+      </div>
+      <div class="operator-payment-preview-grid">
+        <article class="menu-card">
+          <h3>Payment Display</h3>
+          <p>${escapeHtml(brand)}</p>
+          <span>Customer portal payment heading</span>
+        </article>
+        <article class="menu-card">
+          <h3>Support Mobile</h3>
+          <p>${escapeHtml(support)}</p>
+          <span>Customer help contact</span>
+        </article>
+        <article class="menu-card">
+          <h3>Portal Link Format</h3>
+          <p>${escapeHtml(portalBase)}</p>
+          <span>Unique customer ID ke saath share hoga</span>
+        </article>
+      </div>
+      ${settings?.qrImageUrl
+        ? `<div class="operator-qr-preview-wrap"><img class="qr-preview operator-qr-preview" src="${escapeHtml(settings.qrImageUrl)}" alt="Operator QR Preview" /></div>`
+        : `<div class="empty-state">QR image URL save karoge to yahin preview dikh jayegi.</div>`}
+      <div class="customer-upi-card">
+        <span>Customer Instructions</span>
+        <strong>${escapeHtml(settings?.qrInstructions || "QR scan karke payment karein, phir UTR submit karein.")}</strong>
+      </div>
+    </div>
   `;
 }
 
