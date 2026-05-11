@@ -10,7 +10,8 @@
     "dev:api": "npm --workspace apps/api run dev",
     "dev:web": "npm --workspace apps/web run dev",
     "start:api": "npm --workspace apps/api run start",
-    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web"
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "postinstall": "npm run prisma:generate --workspace apps/api"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
