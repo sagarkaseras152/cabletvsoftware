@@ -19,6 +19,7 @@ const operatorMenu = [
   { key: "reports", title: "Reports", description: "Collections and due summary" },
   { key: "staff", title: "Staff", description: "Team and permissions" },
   { key: "expenses", title: "Expenses", description: "Operational cost" },
+  { key: "network", title: "Network", description: "OLT, ONT and ACS tasks" },
   { key: "settings", title: "Settings", description: "Brand and billing rules" },
 ];
 
@@ -39,6 +40,9 @@ const state = {
     reports: [],
     staff: [],
     expenses: [],
+    olts: [],
+    onts: [],
+    acsTasks: [],
     settings: null,
   },
 };
@@ -546,6 +550,80 @@ function renderOperatorView() {
         ${tableWrapper(renderExpenseTable(data.expenses))}
       </section>
     `,
+    network: `
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Network Core</p><h2>OLT Management</h2></div></div>
+        <form id="oltForm" class="form-grid two-col-grid">
+          <label>OLT Name<input name="name" required /></label>
+          <label>Vendor
+            <select name="vendor">
+              <option value="syrotech">Syrotech</option>
+              <option value="dbc">DBC</option>
+              <option value="bdcom">BDCOM</option>
+            </select>
+          </label>
+          <label>Model<input name="model" /></label>
+          <label>Management IP<input name="ipAddress" required /></label>
+          <label>Username<input name="username" /></label>
+          <label>Password<input name="password" /></label>
+          <label>Firmware<input name="firmware" /></label>
+          <label>PON Ports<input name="ponPorts" type="number" value="4" /></label>
+          <label>Location<input name="location" /></label>
+          <div class="form-actions"><button class="primary-btn" type="submit">Add OLT</button></div>
+        </form>
+        ${tableWrapper(renderOltTable(data.olts))}
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Access Devices</p><h2>ONT Inventory</h2></div></div>
+        <form id="ontForm" class="form-grid two-col-grid">
+          <label>Serial Number<input name="serialNumber" required /></label>
+          <label>Vendor
+            <select name="vendor">
+              <option value="syrotech">Syrotech</option>
+              <option value="dbc">DBC</option>
+              <option value="bdcom">BDCOM</option>
+            </select>
+          </label>
+          <label>Model<input name="model" /></label>
+          <label>OLT
+            <select name="oltId">
+              <option value="">Unmapped</option>
+              ${renderOltOptions(data.olts)}
+            </select>
+          </label>
+          <label>Customer
+            <select name="customerId">
+              <option value="">Unmapped</option>
+              ${renderCustomerOptions(data.customers)}
+            </select>
+          </label>
+          <label>PON Port<input name="ponPort" /></label>
+          <label>ONU Index<input name="onuIndex" /></label>
+          <label>TR-069 Ready
+            <select name="tr069Enabled">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <label>WiFi SSID<input name="wifiSsid" /></label>
+          <label>WiFi Password<input name="wifiPassword" /></label>
+          <div class="form-actions"><button class="primary-btn" type="submit">Add ONT</button></div>
+        </form>
+        ${tableWrapper(renderOntTable(data.onts, data.olts, data.customers))}
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Provisioning</p><h2>WiFi Update Queue</h2></div></div>
+        <form id="wifiTaskForm" class="form-grid two-col-grid">
+          <label>ONT
+            <select name="ontId">${renderOntOptions(data.onts)}</select>
+          </label>
+          <label>New WiFi Name<input name="wifiSsid" required /></label>
+          <label>New WiFi Password<input name="wifiPassword" required /></label>
+          <div class="form-actions"><button class="primary-btn" type="submit">Queue WiFi Change</button></div>
+        </form>
+        ${tableWrapper(renderAcsTaskTable(data.acsTasks, data.onts))}
+      </section>
+    `,
     settings: `
       <section class="panel">
         <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand and Billing Settings</h2></div></div>
@@ -573,6 +651,14 @@ function renderCustomerOptions(items, selectedId = "") {
 
 function renderPackageOptions(items) {
   return items.map((item) => `<option value="${item.id}">${item.name} | ${formatMoney(item.price)}</option>`).join("");
+}
+
+function renderOltOptions(items) {
+  return items.map((item) => `<option value="${item.id}">${item.name} | ${item.ipAddress}</option>`).join("");
+}
+
+function renderOntOptions(items) {
+  return items.map((item) => `<option value="${item.id}">${item.serialNumber} | ${item.vendor || "-"}</option>`).join("");
 }
 
 function renderPaymentCards(items) {
@@ -785,6 +871,83 @@ function renderExpenseTable(items) {
                 <td>${item.category}</td>
                 <td>${item.expenseDate}</td>
                 <td>${formatMoney(item.amount)}</td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderOltTable(items) {
+  return `
+    <table>
+      <thead><tr><th>Name</th><th>Vendor</th><th>Model</th><th>IP</th><th>Firmware</th><th>PON</th><th>Status</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.name}</td>
+                <td>${item.vendor}</td>
+                <td>${item.model || "-"}</td>
+                <td>${item.ipAddress}</td>
+                <td>${item.firmware || "-"}</td>
+                <td>${item.ponPorts || 0}</td>
+                <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderOntTable(onts, olts, customers) {
+  const oltMap = Object.fromEntries(olts.map((item) => [item.id, item]));
+  const customerMap = Object.fromEntries(customers.map((item) => [item.id, item]));
+  return `
+    <table>
+      <thead><tr><th>Serial</th><th>Vendor</th><th>OLT</th><th>Customer</th><th>PON</th><th>TR-069</th><th>WiFi</th><th>Status</th></tr></thead>
+      <tbody>
+        ${onts
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.serialNumber}</td>
+                <td>${item.vendor || "-"}</td>
+                <td>${oltMap[item.oltId]?.name || "-"}</td>
+                <td>${customerMap[item.customerId]?.name || "-"}</td>
+                <td>${item.ponPort || "-"}</td>
+                <td><span class="badge ${item.tr069Enabled ? "success" : "warning"}">${item.tr069Enabled ? "ready" : "pending"}</span></td>
+                <td>${item.wifiSsid || "-"}</td>
+                <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderAcsTaskTable(items, onts) {
+  const ontMap = Object.fromEntries(onts.map((item) => [item.id, item]));
+  return `
+    <table>
+      <thead><tr><th>Task</th><th>Device</th><th>Status</th><th>Details</th><th>Created</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.taskType}</td>
+                <td>${ontMap[item.ontId]?.serialNumber || "-"}</td>
+                <td><span class="badge ${badgeClass(item.status)}">${item.status}</span></td>
+                <td>${item.resultMessage || "-"}</td>
+                <td>${formatDate(item.createdAt)}</td>
               </tr>
             `,
           )
@@ -1040,6 +1203,53 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const oltForm = document.getElementById("oltForm");
+  if (oltForm) {
+    oltForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      await fetchJson("/olts", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("OLT added successfully.");
+    });
+  }
+
+  const ontForm = document.getElementById("ontForm");
+  if (ontForm) {
+    ontForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(formData.entries());
+      payload.tr069Enabled = payload.tr069Enabled === "true";
+      await fetchJson("/onts", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("ONT added successfully.");
+    });
+  }
+
+  const wifiTaskForm = document.getElementById("wifiTaskForm");
+  if (wifiTaskForm) {
+    wifiTaskForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      await fetchJson("/acs/tasks/wifi", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("WiFi update task queued.");
+    });
+  }
+
   const settingsForm = document.getElementById("settingsForm");
   if (settingsForm) {
     settingsForm.addEventListener("submit", async (event) => {
@@ -1103,7 +1313,7 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, recharges, reports, staff, expenses, settings] =
+  const [operators, customers, packages, payments, recharges, reports, staff, expenses, olts, onts, acsTasks, settings] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
@@ -1113,6 +1323,9 @@ async function loadOperatorData() {
       fetchJson("/reports"),
       fetchJson("/staff"),
       fetchJson("/expenses"),
+      fetchJson("/olts"),
+      fetchJson("/onts"),
+      fetchJson("/acs/tasks"),
       fetchJson("/settings"),
     ]);
 
@@ -1124,6 +1337,9 @@ async function loadOperatorData() {
   state.data.reports = reports.items;
   state.data.staff = staff.items;
   state.data.expenses = expenses.items;
+  state.data.olts = olts.items;
+  state.data.onts = onts.items;
+  state.data.acsTasks = acsTasks.items;
   state.data.settings = settings.item;
   updateWorkspaceBrand();
 }

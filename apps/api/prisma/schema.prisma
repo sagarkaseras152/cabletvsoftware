@@ -28,6 +28,9 @@ model Tenant {
   staffMembers       StaffMember[]
   expenses           Expense[]
   settings           TenantSetting?
+  olts               Olt[]
+  onts               Ont[]
+  acsTasks           AcsTask[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -138,4 +141,74 @@ model TenantSetting {
   lateFee        Float   @default(0)
   supportMobile  String?
   address        String?
+}
+
+model Olt {
+  id             String   @id
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  vendor         String
+  model          String?
+  ipAddress      String
+  username       String?
+  password       String?
+  firmware       String?
+  location       String?
+  ponPorts       Int      @default(0)
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  onts           Ont[]
+
+  @@unique([tenantId, ipAddress])
+}
+
+model Ont {
+  id                     String   @id
+  tenantId               String
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id])
+  oltId                  String?
+  olt                    Olt?     @relation(fields: [oltId], references: [id])
+  customerId             String?
+  serialNumber           String
+  macAddress             String?
+  vendor                 String?
+  model                  String?
+  ponPort                String?
+  onuIndex               String?
+  lineProfile            String?
+  serviceProfile         String?
+  tr069Enabled           Boolean  @default(false)
+  acsDeviceId            String?  @unique
+  connectionRequestUrl   String?
+  wifiSsid               String?
+  wifiPassword           String?
+  wanMode                String?
+  pppoeUsername          String?
+  pppoePassword          String?
+  status                 String   @default("offline")
+  lastInformAt           DateTime?
+  lastProvisionedAt      DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  acsTasks               AcsTask[]
+
+  @@unique([tenantId, serialNumber])
+}
+
+model AcsTask {
+  id              String   @id
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  ontId           String?
+  ont             Ont?     @relation(fields: [ontId], references: [id])
+  taskType        String
+  status          String   @default("queued")
+  requestedBy     String?
+  payload         String?
+  resultMessage   String?
+  executedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
