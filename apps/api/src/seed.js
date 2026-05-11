@@ -1,24 +1,35 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./db.js";
 
-async function upsertTenant(data) {
-  return prisma.tenant.upsert({
-    where: { id: data.id },
-    update: data,
-    create: data,
-  });
+async function createTenantIfMissing(data) {
+  const existing = await prisma.tenant.findUnique({ where: { id: data.id } });
+  if (existing) return existing;
+  return prisma.tenant.create({ data });
 }
 
-async function upsertUser(data) {
-  return prisma.user.upsert({
-    where: { id: data.id },
-    update: data,
-    create: data,
-  });
+async function createUserIfMissing(data) {
+  const existingById = await prisma.user.findUnique({ where: { id: data.id } });
+  if (existingById) return existingById;
+  const existingByEmail = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existingByEmail) return existingByEmail;
+  return prisma.user.create({ data });
+}
+
+async function createIfMissing(model, where, data) {
+  const existing = await model.findFirst({ where });
+  if (existing) return existing;
+  return model.create({ data });
 }
 
 export async function seedDatabase() {
-  await upsertTenant({
+  const existingTenants = await prisma.tenant.count();
+  const existingUsers = await prisma.user.count();
+
+  if (existingTenants > 0 || existingUsers > 0) {
+    return;
+  }
+
+  await createTenantIfMissing({
     id: "tenant-demooperator",
     code: "DEMOOP1",
     businessName: "Apex Cable Network",
@@ -33,7 +44,7 @@ export async function seedDatabase() {
     monthlyCollection: 86500,
   });
 
-  await upsertTenant({
+  await createTenantIfMissing({
     id: "tenant-skyline",
     code: "SKYLINE",
     businessName: "Skyline Cable & Broadband",
@@ -48,7 +59,7 @@ export async function seedDatabase() {
     monthlyCollection: 684500,
   });
 
-  await upsertUser({
+  await createUserIfMissing({
     id: "user-platform-1",
     tenantId: null,
     name: "Platform Owner",
@@ -59,7 +70,7 @@ export async function seedDatabase() {
     isActive: true,
   });
 
-  await upsertUser({
+  await createUserIfMissing({
     id: "user-operator-demo",
     tenantId: "tenant-demooperator",
     name: "Apex Network Admin",
@@ -70,17 +81,10 @@ export async function seedDatabase() {
     isActive: true,
   });
 
-  await prisma.package.upsert({
-    where: { id: "pkg-demo-fiber" },
-    update: {
-      tenantId: "tenant-demooperator",
-      name: "Fiber 40 Mbps",
-      type: "internet",
-      price: 599,
-      validityDays: 30,
-      customers: 1,
-    },
-    create: {
+  await createIfMissing(
+    prisma.package,
+    { id: "pkg-demo-fiber" },
+    {
       id: "pkg-demo-fiber",
       tenantId: "tenant-demooperator",
       name: "Fiber 40 Mbps",
@@ -89,25 +93,12 @@ export async function seedDatabase() {
       validityDays: 30,
       customers: 1,
     },
-  });
+  );
 
-  await prisma.customer.upsert({
-    where: { id: "cust-3001" },
-    update: {
-      tenantId: "tenant-demooperator",
-      customerCode: "DOP-3001",
-      name: "Rahul Soni",
-      mobile: "9833333333",
-      area: "Arera Colony",
-      status: "active",
-      packageId: "pkg-demo-fiber",
-      packageName: "Fiber 40 Mbps",
-      dueAmount: 599,
-      dueDate: "2026-05-18",
-      expiryDate: "2026-05-18",
-      connectionType: "internet",
-    },
-    create: {
+  await createIfMissing(
+    prisma.customer,
+    { id: "cust-3001" },
+    {
       id: "cust-3001",
       tenantId: "tenant-demooperator",
       customerCode: "DOP-3001",
@@ -122,18 +113,12 @@ export async function seedDatabase() {
       expiryDate: "2026-05-18",
       connectionType: "internet",
     },
-  });
+  );
 
-  await prisma.staffMember.upsert({
-    where: { id: "staff-1" },
-    update: {
-      tenantId: "tenant-demooperator",
-      name: "Rakesh Collector",
-      mobile: "9898989898",
-      role: "collector",
-      status: "active",
-    },
-    create: {
+  await createIfMissing(
+    prisma.staffMember,
+    { id: "staff-1" },
+    {
       id: "staff-1",
       tenantId: "tenant-demooperator",
       name: "Rakesh Collector",
@@ -141,18 +126,12 @@ export async function seedDatabase() {
       role: "collector",
       status: "active",
     },
-  });
+  );
 
-  await prisma.expense.upsert({
-    where: { id: "exp-1" },
-    update: {
-      tenantId: "tenant-demooperator",
-      title: "Fiber maintenance",
-      category: "Maintenance",
-      amount: 2500,
-      expenseDate: "2026-05-10",
-    },
-    create: {
+  await createIfMissing(
+    prisma.expense,
+    { id: "exp-1" },
+    {
       id: "exp-1",
       tenantId: "tenant-demooperator",
       title: "Fiber maintenance",
@@ -160,26 +139,12 @@ export async function seedDatabase() {
       amount: 2500,
       expenseDate: "2026-05-10",
     },
-  });
+  );
 
-  await prisma.tenantSetting.upsert({
-    where: { tenantId: "tenant-demooperator" },
-    update: {
-      companyName: "Apex Cable Network",
-      billingDay: 5,
-      lateFee: 25,
-      supportMobile: "9999999999",
-      address: "Bhopal",
-      acsUsername: "acs-apex",
-      acsPassword: "acs-pass-123",
-      defaultAcsProfile: "tr181",
-      defaultWifiSsidPath: "Device.WiFi.SSID.1.SSID",
-      defaultWifiPasswordPath: "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
-      defaultInformInterval: 300,
-      autoApproveOnts: true,
-      tr069TemplateName: "Default Home Fiber",
-    },
-    create: {
+  await createIfMissing(
+    prisma.tenantSetting,
+    { tenantId: "tenant-demooperator" },
+    {
       tenantId: "tenant-demooperator",
       companyName: "Apex Cable Network",
       billingDay: 5,
@@ -195,24 +160,12 @@ export async function seedDatabase() {
       autoApproveOnts: true,
       tr069TemplateName: "Default Home Fiber",
     },
-  });
+  );
 
-  await prisma.olt.upsert({
-    where: { id: "olt-1" },
-    update: {
-      tenantId: "tenant-demooperator",
-      name: "Core OLT 01",
-      vendor: "syrotech",
-      model: "SY-GPON-4OLT",
-      ipAddress: "10.10.10.2",
-      username: "admin",
-      password: "admin",
-      firmware: "v1.0.3",
-      location: "Main POP",
-      ponPorts: 4,
-      status: "active",
-    },
-    create: {
+  await createIfMissing(
+    prisma.olt,
+    { id: "olt-1" },
+    {
       id: "olt-1",
       tenantId: "tenant-demooperator",
       name: "Core OLT 01",
@@ -226,42 +179,12 @@ export async function seedDatabase() {
       ponPorts: 4,
       status: "active",
     },
-  });
+  );
 
-  await prisma.ont.upsert({
-    where: { id: "ont-1" },
-    update: {
-      tenantId: "tenant-demooperator",
-      oltId: "olt-1",
-      customerId: "cust-3001",
-      serialNumber: "SYRO12345678",
-      macAddress: "A0:B1:C2:D3:E4:F5",
-      vendor: "syrotech",
-      model: "XPON ONT",
-      ponPort: "PON1",
-      onuIndex: "1",
-      lineProfile: "40M_PROFILE",
-      serviceProfile: "HOME_WIFI",
-      tr069Enabled: true,
-      acsDeviceId: "SYRO12345678",
-      acsProfile: "tr181",
-      connectionRequestUrl: "http://10.10.10.25:7547",
-      connectionRequestUser: "acs-user",
-      connectionRequestPass: "acs-pass",
-      wifiSsidPath: "Device.WiFi.SSID.1.SSID",
-      wifiPasswordPath: "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
-      wifiSsid: "ApexHome",
-      wifiPassword: "Apex@12345",
-      wanMode: "pppoe",
-      pppoeUsername: "rahul.soni",
-      pppoePassword: "pass1234",
-      status: "online",
-      discoveryStatus: "approved",
-      informCount: 1,
-      lastInformAt: new Date(),
-      lastProvisionedAt: new Date(),
-    },
-    create: {
+  await createIfMissing(
+    prisma.ont,
+    { id: "ont-1" },
+    {
       id: "ont-1",
       tenantId: "tenant-demooperator",
       oltId: "olt-1",
@@ -293,21 +216,12 @@ export async function seedDatabase() {
       lastInformAt: new Date(),
       lastProvisionedAt: new Date(),
     },
-  });
+  );
 
-  await prisma.acsTask.upsert({
-    where: { id: "acs-task-1" },
-    update: {
-      tenantId: "tenant-demooperator",
-      ontId: "ont-1",
-      taskType: "wifi_update",
-      status: "completed",
-      requestedBy: "user-operator-demo",
-      payload: JSON.stringify({ wifiSsid: "ApexHome", wifiPassword: "Apex@12345" }),
-      resultMessage: "Provisioning history seeded",
-      executedAt: new Date(),
-    },
-    create: {
+  await createIfMissing(
+    prisma.acsTask,
+    { id: "acs-task-1" },
+    {
       id: "acs-task-1",
       tenantId: "tenant-demooperator",
       ontId: "ont-1",
@@ -318,5 +232,5 @@ export async function seedDatabase() {
       resultMessage: "Provisioning history seeded",
       executedAt: new Date(),
     },
-  });
+  );
 }
