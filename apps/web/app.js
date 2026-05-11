@@ -552,6 +552,7 @@ function renderOperatorView() {
     `,
     network: `
       <section class="panel">
+        <div class="feedback success">ACS endpoint: <strong>${apiBase.replace(/\/api$/, "")}/api/acs/cwmp</strong></div>
         <div class="section-head"><div><p class="eyebrow">Network Core</p><h2>OLT Management</h2></div></div>
         <form id="oltForm" class="form-grid two-col-grid">
           <label>OLT Name<input name="name" required /></label>
@@ -585,6 +586,12 @@ function renderOperatorView() {
             </select>
           </label>
           <label>Model<input name="model" /></label>
+          <label>ACS Profile
+            <select name="acsProfile">
+              <option value="tr181">TR-181</option>
+              <option value="tr098">TR-098</option>
+            </select>
+          </label>
           <label>OLT
             <select name="oltId">
               <option value="">Unmapped</option>
@@ -605,6 +612,11 @@ function renderOperatorView() {
               <option value="false">No</option>
             </select>
           </label>
+          <label>Connection Request URL<input name="connectionRequestUrl" /></label>
+          <label>Conn. User<input name="connectionRequestUser" /></label>
+          <label>Conn. Password<input name="connectionRequestPass" /></label>
+          <label>SSID Path<input name="wifiSsidPath" placeholder="optional custom path" /></label>
+          <label>Password Path<input name="wifiPasswordPath" placeholder="optional custom path" /></label>
           <label>WiFi SSID<input name="wifiSsid" /></label>
           <label>WiFi Password<input name="wifiPassword" /></label>
           <div class="form-actions"><button class="primary-btn" type="submit">Add ONT</button></div>

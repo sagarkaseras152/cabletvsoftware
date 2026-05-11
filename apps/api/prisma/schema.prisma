@@ -181,7 +181,12 @@ model Ont {
   serviceProfile         String?
   tr069Enabled           Boolean  @default(false)
   acsDeviceId            String?  @unique
+  acsProfile             String   @default("tr181")
   connectionRequestUrl   String?
+  connectionRequestUser  String?
+  connectionRequestPass  String?
+  wifiSsidPath           String?
+  wifiPasswordPath       String?
   wifiSsid               String?
   wifiPassword           String?
   wanMode                String?
@@ -204,6 +209,7 @@ model AcsTask {
   ontId           String?
   ont             Ont?     @relation(fields: [ontId], references: [id])
   taskType        String
+  commandKey      String?
   status          String   @default("queued")
   requestedBy     String?
   payload         String?
