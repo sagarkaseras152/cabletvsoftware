@@ -27,6 +27,7 @@ const state = {
   adminSelectedOperatorId: "",
   adminFormMode: "create",
   operatorView: "dashboard",
+  operatorCustomerSearch: "",
   customerFormOpen: false,
   customerImportPreview: null,
   customerImportFileName: "",
@@ -1002,8 +1003,8 @@ function renderAdminOperatorDetail() {
 function renderOperatorShell(user, tenant) {
   const brandName = state.data.settings?.companyName || tenant?.businessName || "Workspace";
   appRoot.innerHTML = `
-    <div class="page-shell">
-      <div class="topbar">
+    <div class="page-shell operator-shell">
+      <div class="topbar operator-topbar">
         <div>
           <p class="eyebrow">CableOps</p>
           <h2 id="workspaceTitle">${brandName}</h2>
@@ -1021,6 +1022,7 @@ function renderOperatorShell(user, tenant) {
           <div class="sidebar-brand">
             <p class="eyebrow">Navigation</p>
             <h3>Business Suite</h3>
+            <p class="sidebar-note">Customers, collections, network and service operations ko faster control me rakho.</p>
           </div>
           <nav id="operatorNav" class="nav-list"></nav>
         </aside>
@@ -1063,10 +1065,60 @@ function updateWorkspaceBrand() {
   title.textContent = state.data.settings?.companyName || session.tenant?.businessName || "Workspace";
 }
 
+function renderOperatorWorkspaceHero(data, metrics, settings) {
+  const session = getSession();
+  const brandName = settings?.companyName || session?.tenant?.businessName || "Workspace";
+  const ownerLine = [session?.user?.name, settings?.supportMobile || session?.tenant?.mobile || "Support not set"]
+    .filter(Boolean)
+    .join(" | ");
+
+  return `
+    <section class="hero operator-hero">
+      <div class="hero-copy operator-hero-copy">
+        <p class="eyebrow">Operations Hub</p>
+        <h1>${escapeHtml(brandName)}</h1>
+        <p class="lede">
+          Collections, due recovery, customer lifecycle, recharge flow, network visibility and operator-side business controls ek hi polished workspace me.
+        </p>
+        <div class="operator-hero-subline">${escapeHtml(ownerLine)}</div>
+        <div class="operator-quick-actions">
+          <button type="button" class="primary-btn jump-view-btn" data-jump-view="customers">Add Customer</button>
+          <button type="button" class="ghost-btn jump-view-btn" data-jump-view="payments">Collect Payment</button>
+          <button type="button" class="ghost-btn jump-view-btn" data-jump-view="recharge">Recharge</button>
+          <button type="button" class="ghost-btn jump-view-btn" data-jump-view="settings">Payment Setup</button>
+        </div>
+      </div>
+      <div class="operator-hero-metrics">
+        <article class="operator-premium-metric">
+          <span>Today</span>
+          <strong>${formatMoney(metrics.todayCollections)}</strong>
+          <p>Fresh collections posted today</p>
+        </article>
+        <article class="operator-premium-metric operator-premium-metric-dark">
+          <span>Pending Due</span>
+          <strong>${formatMoney(metrics.pendingTotal)}</strong>
+          <p>${metrics.dueCustomersCount} customers pending</p>
+        </article>
+        <article class="operator-premium-metric">
+          <span>Approvals</span>
+          <strong>${metrics.pendingRequests}</strong>
+          <p>Customer payment confirmations waiting</p>
+        </article>
+        <article class="operator-premium-metric">
+          <span>Network</span>
+          <strong>${metrics.onlineOnts}</strong>
+          <p>Online ONTs visible in live inventory</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderOperatorView() {
   const root = document.getElementById("operatorContent");
   const data = state.data;
   const today = normalizeDateOnly(new Date());
+  const customerSearch = String(state.operatorCustomerSearch || "").trim().toLowerCase();
   const dueCustomers = data.customers
     .filter((item) => Number(item.dueAmount || 0) > 0)
     .filter((item) => {
@@ -1091,11 +1143,31 @@ function renderOperatorView() {
   const todayCollections = data.payments
     .filter((item) => normalizeDateOnly(item.paymentDate) === today)
     .reduce((sum, item) => sum + Number(item.amountPaid || 0), 0);
+  const pendingRequests = data.paymentRequests.filter((item) => item.status === "pending").length;
+  const onlineOnts = data.onts.filter((item) => item.status === "online").length;
+  const filteredCustomers = data.customers.filter((item) => {
+    if (!customerSearch) return true;
+    return [item.name, item.mobile, item.customerCode, item.area, item.packageName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(customerSearch));
+  });
+  const customerAreas = new Set(data.customers.map((item) => item.area).filter(Boolean)).size;
+  const avgPackagePrice = data.packages.length
+    ? data.packages.reduce((sum, item) => sum + Number(item.price || 0), 0) / data.packages.length
+    : 0;
+  const metrics = {
+    todayCollections,
+    pendingTotal,
+    dueCustomersCount: dueCustomers.length,
+    pendingRequests,
+    onlineOnts,
+  };
 
   const views = {
     dashboard: `
+      ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Dashboard</p><h2>Main Overview</h2></div></div>
+        <div class="section-head"><div><p class="eyebrow">Dashboard</p><h2>Main Overview</h2><p class="subtle-note">Collections, due recovery, customer count aur package activity ka fast command view.</p></div></div>
         <div class="menu-grid dashboard-grid">
           <article class="menu-card kpi-card"><h3>Total Customers</h3><p>${data.customers.length}</p><span>All registered customers</span></article>
           <article class="menu-card kpi-card"><h3>Active Customers</h3><p>${activeCustomers}</p><span>Currently active connections</span></article>
@@ -1103,6 +1175,31 @@ function renderOperatorView() {
           <article class="menu-card kpi-card"><h3>Pending Due</h3><p>${formatMoney(pendingTotal)}</p><span>${dueCustomers.length} customers pending</span></article>
           <article class="menu-card kpi-card"><h3>Monthly Collection</h3><p>${formatMoney(monthlyCollection)}</p><span>Total collected amount</span></article>
           <article class="menu-card kpi-card"><h3>Total Packages</h3><p>${data.packages.length}</p><span>Available active plans</span></article>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Action Center</p><h2>Operator Priority Queue</h2></div></div>
+        <div class="menu-grid operator-priority-grid">
+          <article class="menu-card priority-card">
+            <h3>Payment Confirmations</h3>
+            <p>${pendingRequests}</p>
+            <span>Customer submitted requests waiting for approval</span>
+          </article>
+          <article class="menu-card priority-card">
+            <h3>Recharge Ready</h3>
+            <p>${data.recharges.length}</p>
+            <span>Latest recharge records available for review</span>
+          </article>
+          <article class="menu-card priority-card">
+            <h3>Service Areas</h3>
+            <p>${customerAreas}</p>
+            <span>Distinct areas mapped across your customer base</span>
+          </article>
+          <article class="menu-card priority-card">
+            <h3>Online Devices</h3>
+            <p>${onlineOnts}</p>
+            <span>ONT inventory currently reporting online status</span>
+          </article>
         </div>
       </section>
       <section class="panel">
@@ -1126,20 +1223,28 @@ function renderOperatorView() {
           <div class="stack-list">${renderPaymentCards(data.payments.slice(0, 6))}</div>
         </article>
       </section>
-    `,
-    customers: `
-      <section class="panel">
-        <div class="section-head">
-          <div><p class="eyebrow">Customers</p><h2>Customer List</h2></div>
-          <div class="toolbar">
-            <button type="button" id="toggleCustomerForm" class="primary-btn">
-              ${state.customerFormOpen ? "Close Form" : "Add New Customer"}
-            </button>
-          </div>
-        </div>
-        <div class="inline-form-block import-block">
+      `,
+      customers: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
           <div class="section-head">
-            <div>
+            <div><p class="eyebrow">Customers</p><h2>Customer List</h2><p class="subtle-note">Customer records, migration import aur direct portal distribution ek hi place par.</p></div>
+            <div class="toolbar">
+              <label class="compact-field operator-search-field">Search Customer<input id="customerSearchInput" type="search" value="${escapeHtml(state.operatorCustomerSearch)}" placeholder="Name, mobile, portal ID, package" /></label>
+              <button type="button" id="toggleCustomerForm" class="primary-btn">
+                ${state.customerFormOpen ? "Close Form" : "Add New Customer"}
+              </button>
+            </div>
+          </div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Visible Records</h3><p>${filteredCustomers.length}</p><span>Filtered customer count</span></article>
+            <article class="menu-card operator-mini-card"><h3>Active</h3><p>${activeCustomers}</p><span>Customers currently active</span></article>
+            <article class="menu-card operator-mini-card"><h3>Pending Due</h3><p>${dueCustomers.length}</p><span>Collections follow-up list</span></article>
+            <article class="menu-card operator-mini-card"><h3>Areas Covered</h3><p>${customerAreas}</p><span>Distinct mapped customer localities</span></article>
+          </div>
+          <div class="inline-form-block import-block">
+            <div class="section-head">
+              <div>
               <p class="eyebrow">Migration Import</p>
               <h3>Upload Excel CSV Safely</h3>
               <p class="subtle-note">Dusre software se customer export ko CSV me save karke upload karo. Pehle preview aayega, phir safe import chalega.</p>
@@ -1185,17 +1290,24 @@ function renderOperatorView() {
               </label>
               <div class="form-actions"><button class="primary-btn" type="submit">Save Customer</button></div>
             </form>
-          `
-          : ""}
-        ${tableWrapper(renderCustomerTable(data.customers))}
-      </section>
-    `,
-    packages: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Packages</p><h2>Create Package</h2></div></div>
-        <form id="packageForm" class="form-grid two-col-grid">
-          <label>Package Name<input name="name" required /></label>
-          <label>Type
+            `
+            : ""}
+          ${tableWrapper(renderCustomerTable(filteredCustomers))}
+        </section>
+      `,
+      packages: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Packages</p><h2>Create Package</h2><p class="subtle-note">Cable, internet aur combo plans ko structured catalog me maintain karo.</p></div></div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Total Plans</h3><p>${data.packages.length}</p><span>Packages currently configured</span></article>
+            <article class="menu-card operator-mini-card"><h3>Average Price</h3><p>${formatMoney(avgPackagePrice)}</p><span>Average plan value across catalog</span></article>
+            <article class="menu-card operator-mini-card"><h3>Combo Ready</h3><p>${data.packages.filter((item) => item.type === "combo").length}</p><span>Combo packages available</span></article>
+            <article class="menu-card operator-mini-card"><h3>Assigned Base</h3><p>${data.customers.filter((item) => item.packageId).length}</p><span>Customers already mapped to a plan</span></article>
+          </div>
+          <form id="packageForm" class="form-grid two-col-grid">
+            <label>Package Name<input name="name" required /></label>
+            <label>Type
             <select name="type">
               <option value="cable">Cable</option>
               <option value="internet">Internet</option>
@@ -1211,18 +1323,25 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Package List</p><h2>Available Packages</h2></div></div>
         ${tableWrapper(renderPackageTable(data.packages))}
       </section>
-    `,
-    payments: `
-      <section class="panel">
-        <div class="section-head">
-          <div><p class="eyebrow">Customer Payment Requests</p><h2>Pending Approval Queue</h2></div>
-          <div class="toolbar">
-            <button type="button" id="copyCustomerPaymentLink" class="ghost-btn">Copy Customer Payment Link</button>
+      `,
+      payments: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head">
+            <div><p class="eyebrow">Customer Payment Requests</p><h2>Pending Approval Queue</h2><p class="subtle-note">Customer-submitted UTR confirmations ko verify karke auto ledger entry post karo.</p></div>
+            <div class="toolbar">
+              <button type="button" id="copyCustomerPaymentLink" class="ghost-btn">Copy Customer Payment Link</button>
+            </div>
           </div>
-        </div>
-        ${tableWrapper(renderPaymentRequestTable(data.paymentRequests))}
-      </section>
-      <section class="panel">
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Pending Requests</h3><p>${pendingRequests}</p><span>Approval waiting list</span></article>
+            <article class="menu-card operator-mini-card"><h3>Today Posted</h3><p>${formatMoney(todayCollections)}</p><span>Ledger value posted today</span></article>
+            <article class="menu-card operator-mini-card"><h3>Total Receipts</h3><p>${data.payments.length}</p><span>Recorded payment entries</span></article>
+            <article class="menu-card operator-mini-card"><h3>Pending Due</h3><p>${formatMoney(pendingTotal)}</p><span>Outstanding collection base</span></article>
+          </div>
+          ${tableWrapper(renderPaymentRequestTable(data.paymentRequests))}
+        </section>
+        <section class="panel">
         <div class="section-head"><div><p class="eyebrow">Payments</p><h2>Collect Payment</h2></div></div>
         <form id="paymentForm" class="form-grid two-col-grid">
           <label>Customer
@@ -1243,13 +1362,20 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Payment History</p><h2>Recent Receipts</h2></div></div>
         <div class="stack-list">${renderPaymentCards(data.payments)}</div>
       </section>
-    `,
-    recharge: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Recharge</p><h2>Recharge Customer</h2></div></div>
-        <form id="rechargeForm" class="form-grid two-col-grid">
-          <label>Customer
-            <select name="customerId">${renderCustomerOptions(data.customers)}</select>
+      `,
+      recharge: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Recharge</p><h2>Recharge Customer</h2><p class="subtle-note">Renewal, validity extension aur assisted recharge workflow ko structured rakho.</p></div></div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Total Recharges</h3><p>${data.recharges.length}</p><span>Recharge events on record</span></article>
+            <article class="menu-card operator-mini-card"><h3>Expiring Soon</h3><p>${expiringCustomers.length}</p><span>Customers near validity edge</span></article>
+            <article class="menu-card operator-mini-card"><h3>Pending Due</h3><p>${dueCustomers.length}</p><span>Recharge follow-up candidates</span></article>
+            <article class="menu-card operator-mini-card"><h3>Collected This Month</h3><p>${formatMoney(monthlyCollection)}</p><span>Useful for renewal planning</span></article>
+          </div>
+          <form id="rechargeForm" class="form-grid two-col-grid">
+            <label>Customer
+              <select name="customerId">${renderCustomerOptions(data.customers)}</select>
           </label>
           <label>Mode
             <select name="mode">
@@ -1265,13 +1391,14 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Recharge History</p><h2>Recent Recharges</h2></div></div>
         <div class="stack-list">${renderRechargeCards(data.recharges)}</div>
       </section>
-    `,
-    reports: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Reports</p><h2>Business Summary</h2></div></div>
-        <div class="menu-grid">
-          <article class="menu-card"><h3>Collection</h3><p>${formatMoney(data.payments.reduce((sum, item) => sum + item.amountPaid, 0))}</p></article>
-          <article class="menu-card"><h3>Pending Due</h3><p>${formatMoney(data.customers.reduce((sum, item) => sum + (item.dueAmount || 0), 0))}</p></article>
+      `,
+      reports: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Reports</p><h2>Business Summary</h2><p class="subtle-note">Collection, due, expenses aur customer growth ko operator-side decision dashboard me dekho.</p></div></div>
+          <div class="menu-grid">
+            <article class="menu-card"><h3>Collection</h3><p>${formatMoney(data.payments.reduce((sum, item) => sum + item.amountPaid, 0))}</p></article>
+            <article class="menu-card"><h3>Pending Due</h3><p>${formatMoney(data.customers.reduce((sum, item) => sum + (item.dueAmount || 0), 0))}</p></article>
           <article class="menu-card"><h3>Expenses</h3><p>${formatMoney(data.expenses.reduce((sum, item) => sum + item.amount, 0))}</p></article>
           <article class="menu-card"><h3>Customers</h3><p>${data.customers.length}</p></article>
         </div>
@@ -1280,13 +1407,20 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Generated Reports</p><h2>Report Files</h2></div></div>
         ${tableWrapper(renderReportsTable(data.reports))}
       </section>
-    `,
-    staff: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Staff</p><h2>Add Staff</h2></div></div>
-        <form id="staffForm" class="form-grid two-col-grid">
-          <label>Name<input name="name" required /></label>
-          <label>Mobile<input name="mobile" required /></label>
+      `,
+      staff: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Staff</p><h2>Add Staff</h2><p class="subtle-note">Collection, support aur technician roles ko better team structure me manage karo.</p></div></div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Total Staff</h3><p>${data.staff.length}</p><span>Team members on platform</span></article>
+            <article class="menu-card operator-mini-card"><h3>Collectors</h3><p>${data.staff.filter((item) => item.role === "collector").length}</p><span>Field collection resources</span></article>
+            <article class="menu-card operator-mini-card"><h3>Technicians</h3><p>${data.staff.filter((item) => item.role === "technician").length}</p><span>Service response headcount</span></article>
+            <article class="menu-card operator-mini-card"><h3>Active Roles</h3><p>${new Set(data.staff.map((item) => item.role)).size}</p><span>Role coverage inside business</span></article>
+          </div>
+          <form id="staffForm" class="form-grid two-col-grid">
+            <label>Name<input name="name" required /></label>
+            <label>Mobile<input name="mobile" required /></label>
           <label>Role
             <select name="role">
               <option value="admin">Admin</option>
@@ -1302,13 +1436,20 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Staff List</p><h2>Current Team</h2></div></div>
         ${tableWrapper(renderStaffTable(data.staff))}
       </section>
-    `,
-    expenses: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Expenses</p><h2>Add Expense</h2></div></div>
-        <form id="expenseForm" class="form-grid two-col-grid">
-          <label>Title<input name="title" required /></label>
-          <label>Category<input name="category" required /></label>
+      `,
+      expenses: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Expenses</p><h2>Add Expense</h2><p class="subtle-note">Operational cost, field spend aur monthly outflow ko clear records me rakho.</p></div></div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>Total Expense</h3><p>${formatMoney(data.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p><span>All recorded expenses</span></article>
+            <article class="menu-card operator-mini-card"><h3>Entries</h3><p>${data.expenses.length}</p><span>Expense rows logged</span></article>
+            <article class="menu-card operator-mini-card"><h3>Net Collection</h3><p>${formatMoney(monthlyCollection - data.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p><span>Collection minus expenses</span></article>
+            <article class="menu-card operator-mini-card"><h3>Due Buffer</h3><p>${formatMoney(pendingTotal)}</p><span>Potential recoverable value</span></article>
+          </div>
+          <form id="expenseForm" class="form-grid two-col-grid">
+            <label>Title<input name="title" required /></label>
+            <label>Category<input name="category" required /></label>
           <label>Amount<input name="amount" type="number" required /></label>
           <label>Date<input name="expenseDate" type="date" required /></label>
           <div class="form-actions"><button class="primary-btn" type="submit">Save Expense</button></div>
@@ -1318,14 +1459,21 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Expense List</p><h2>Recent Expenses</h2></div></div>
         ${tableWrapper(renderExpenseTable(data.expenses))}
       </section>
-    `,
-    network: `
-      <section class="panel">
-        <div class="feedback success">ACS endpoint: <strong>${getAcsEndpoint()}</strong></div>
-        <div class="section-head"><div><p class="eyebrow">Network Core</p><h2>OLT Management</h2></div></div>
-        <form id="oltForm" class="form-grid two-col-grid">
-          <label>OLT Name<input name="name" required /></label>
-          <label>Vendor
+      `,
+      network: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="feedback success">ACS endpoint: <strong>${getAcsEndpoint()}</strong></div>
+          <div class="section-head"><div><p class="eyebrow">Network Core</p><h2>OLT Management</h2><p class="subtle-note">Access layer inventory, ONT provisioning queue aur ACS diagnostics ko one place se monitor karo.</p></div></div>
+          <div class="menu-grid operator-mini-grid">
+            <article class="menu-card operator-mini-card"><h3>OLTs</h3><p>${data.olts.length}</p><span>Core access devices on record</span></article>
+            <article class="menu-card operator-mini-card"><h3>ONTs</h3><p>${data.onts.length}</p><span>Customer edge devices tracked</span></article>
+            <article class="menu-card operator-mini-card"><h3>Online</h3><p>${onlineOnts}</p><span>Live ONTs currently online</span></article>
+            <article class="menu-card operator-mini-card"><h3>Queued Tasks</h3><p>${data.acsTasks.filter((item) => item.status === "queued").length}</p><span>Provisioning tasks waiting dispatch</span></article>
+          </div>
+          <form id="oltForm" class="form-grid two-col-grid">
+            <label>OLT Name<input name="name" required /></label>
+            <label>Vendor
             <select name="vendor">
               <option value="syrotech">Syrotech</option>
               <option value="dbc">DBC</option>
@@ -1408,13 +1556,14 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Diagnostics</p><h2>ACS Event Log</h2></div></div>
         ${tableWrapper(renderAcsEventTable(data.acsEvents, data.onts))}
       </section>
-    `,
-    settings: `
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing, Payment and ACS Settings</h2></div></div>
-        <form id="settingsForm" class="form-grid two-col-grid">
-          <label>Firm Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
-          <label>Support Mobile<input name="supportMobile" value="${data.settings?.supportMobile || ""}" /></label>
+      `,
+      settings: `
+        ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing, Payment and ACS Settings</h2><p class="subtle-note">Business identity, payment instructions, billing rules aur ACS defaults ko operator side se fine-tune karo.</p></div></div>
+          <form id="settingsForm" class="form-grid two-col-grid">
+            <label>Firm Name<input name="companyName" value="${data.settings?.companyName || ""}" /></label>
+            <label>Support Mobile<input name="supportMobile" value="${data.settings?.supportMobile || ""}" /></label>
           <label>Billing Day<input name="billingDay" type="number" value="${data.settings?.billingDay || 1}" /></label>
           <label>Late Fee<input name="lateFee" type="number" value="${data.settings?.lateFee || 0}" /></label>
           <label>Address<input name="address" value="${data.settings?.address || ""}" /></label>
@@ -2091,6 +2240,14 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const customerSearchInput = document.getElementById("customerSearchInput");
+  if (customerSearchInput) {
+    customerSearchInput.addEventListener("input", (event) => {
+      state.operatorCustomerSearch = event.currentTarget.value || "";
+      renderOperatorView();
+    });
+  }
+
   const dueStartFilter = document.getElementById("dueStartFilter");
   if (dueStartFilter) {
     dueStartFilter.addEventListener("change", (event) => {
@@ -2429,6 +2586,14 @@ document.addEventListener("click", async (event) => {
   const adminOperatorButton = event.target.closest(".admin-operator-item[data-operator-id]");
   if (adminOperatorButton) {
     await loadAdminOperatorDetail(adminOperatorButton.dataset.operatorId);
+    return;
+  }
+
+  const jumpViewButton = event.target.closest("[data-jump-view]");
+  if (jumpViewButton) {
+    state.operatorView = jumpViewButton.dataset.jumpView;
+    renderOperatorNav();
+    renderOperatorView();
     return;
   }
 
