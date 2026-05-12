@@ -22,6 +22,8 @@ const modelOrder = [
   ["onts", prisma.ont],
   ["acsTasks", prisma.acsTask],
   ["acsEvents", prisma.acsEvent],
+  ["networkNodes", prisma.networkNode],
+  ["fiberRoutes", prisma.fiberRoute],
 ];
 
 router.get("/export", async (_req, res) => {

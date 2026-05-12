@@ -19,6 +19,7 @@ const operatorMenu = [
   { key: "reports", title: "Reports", description: "Collections and due summary" },
   { key: "staff", title: "Staff", description: "Team and permissions" },
   { key: "expenses", title: "Expenses", description: "Operational cost" },
+  { key: "mapping", title: "Mapping", description: "Fiber routes and field survey" },
   { key: "network", title: "Network", description: "OLT, ONT and ACS tasks" },
   { key: "settings", title: "Settings", description: "Brand and billing rules" },
 ];
@@ -28,6 +29,8 @@ const state = {
   adminFormMode: "create",
   operatorView: "dashboard",
   operatorCustomerSearch: "",
+  mapDrawMode: false,
+  mapDraftPoints: [],
   customerFormOpen: false,
   customerImportPreview: null,
   customerImportFileName: "",
@@ -61,6 +64,9 @@ const state = {
     onts: [],
     acsTasks: [],
     acsEvents: [],
+    networkNodes: [],
+    fiberRoutes: [],
+    mapInsights: null,
     settings: null,
   },
 };
@@ -169,6 +175,24 @@ async function copyText(text) {
   const ok = document.execCommand("copy");
   document.body.removeChild(input);
   return ok;
+}
+
+function parseRoutePoints(pathJson = "") {
+  try {
+    const parsed = JSON.parse(pathJson || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Photo read fail ho gaya."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function badgeClass(status) {
@@ -1114,6 +1138,327 @@ function renderOperatorWorkspaceHero(data, metrics, settings) {
   `;
 }
 
+function renderMapInsightCards(insights) {
+  const counters = insights?.counters || {};
+  return `
+    <div class="menu-grid operator-mini-grid">
+      <article class="menu-card operator-mini-card"><h3>Nodes</h3><p>${counters.totalNodes || 0}</p><span>OLT, splitter, joint, customer endpoints</span></article>
+      <article class="menu-card operator-mini-card"><h3>Routes</h3><p>${counters.totalRoutes || 0}</p><span>Mapped feeder and drop lines</span></article>
+      <article class="menu-card operator-mini-card"><h3>Splitters</h3><p>${counters.splitters || 0}</p><span>Visible splitter and FD ecosystem</span></article>
+      <article class="menu-card operator-mini-card"><h3>Unmapped</h3><p>${counters.unmappedCustomers || 0}</p><span>Customers without physical endpoint map</span></article>
+    </div>
+  `;
+}
+
+function renderSmartMappingNotes(insights) {
+  const suggestions = insights?.suggestions || [];
+  if (!suggestions.length) {
+    return `<div class="empty-state">Map insights abhi generate nahi hui.</div>`;
+  }
+
+  return `
+    <div class="stack-list">
+      ${suggestions.map((item) => `
+        <article class="stack-card smart-note-card">
+          <div>
+            <strong>Smart Insight</strong>
+            <p>${escapeHtml(item)}</p>
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderNetworkNodeTable(items, customers = []) {
+  const customerMap = Object.fromEntries(customers.map((item) => [item.id, item]));
+  if (!items.length) {
+    return `<div class="empty-state">Abhi tak koi map node create nahi hua.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Linked Customer</th><th>Coordinates</th><th>Meta</th><th>Action</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${escapeHtml(item.name)}</td>
+            <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.type)}</span></td>
+            <td>${escapeHtml(customerMap[item.relatedCustomerId]?.name || "-")}</td>
+            <td>${Number(item.latitude).toFixed(5)}, ${Number(item.longitude).toFixed(5)}</td>
+            <td>${escapeHtml(item.splitterRatio || item.colorCode || item.note || "-")}</td>
+            <td><button class="ghost-btn action-btn" data-action="delete-map-node" data-id="${item.id}">Delete</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderFiberRouteTable(items) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi tak koi fiber route draw nahi hua.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Cores</th><th>Length</th><th>Color</th><th>Action</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.routeType)}</td>
+            <td>${item.coreCount || 0}</td>
+            <td>${Math.round(item.lengthMeters || 0)} m</td>
+            <td>${escapeHtml(item.colorCode || item.cableType || "-")}</td>
+            <td><button class="ghost-btn action-btn" data-action="delete-map-route" data-id="${item.id}">Delete</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderMappingView(data, metrics) {
+  const insights = data.mapInsights || {};
+  return `
+    ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Fiber Mapping</p>
+          <h2>Operator Survey Map</h2>
+          <p class="subtle-note">Har operator ka apna isolated network map. Nodes, splitters, fiber routes aur customer endpoints ko map par save karo.</p>
+        </div>
+      </div>
+      ${renderMapInsightCards(insights)}
+      <div class="mapping-layout">
+        <div class="mapping-map-wrap">
+          <div id="networkMapCanvas" class="network-map-canvas"></div>
+          <div class="mapping-draft-bar">
+            <strong>Route Draft:</strong>
+            <span>${state.mapDraftPoints.length} points</span>
+            <button type="button" id="startRouteDrawingBtn" class="ghost-btn">${state.mapDrawMode ? "Drawing Active" : "Start Route Drawing"}</button>
+            <button type="button" id="clearRouteDraftBtn" class="ghost-btn">Clear Draft</button>
+          </div>
+        </div>
+        <div class="mapping-side-panels">
+          <div class="inline-form-block mapping-form-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Node Survey</p>
+                <h3>Add Map Node</h3>
+              </div>
+            </div>
+            <form id="mapNodeForm" class="form-grid">
+              <label>Node Type
+                <select name="type">
+                  <option value="olt">OLT</option>
+                  <option value="fd_box">FD Box</option>
+                  <option value="splitter">Splitter</option>
+                  <option value="joint">Joint</option>
+                  <option value="pole">Pole</option>
+                  <option value="customer_endpoint">Customer Endpoint</option>
+                </select>
+              </label>
+              <label>Name<input name="name" required /></label>
+              <label>Linked Customer
+                <select name="relatedCustomerId">
+                  <option value="">No customer mapping</option>
+                  ${renderCustomerOptions(data.customers)}
+                </select>
+              </label>
+              <label>Parent Splitter / Node
+                <select name="parentNodeId">
+                  <option value="">No parent</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
+                </select>
+              </label>
+              <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
+              <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
+              <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
+              <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
+              <label>Capacity<input name="capacity" type="number" /></label>
+              <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
+              <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
+              <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
+              <div class="toolbar">
+                <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
+                <button class="primary-btn" type="submit">Save Node</button>
+              </div>
+            </form>
+          </div>
+          <div class="inline-form-block mapping-form-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Route Survey</p>
+                <h3>Save Fiber Route</h3>
+              </div>
+            </div>
+            <form id="fiberRouteForm" class="form-grid">
+              <label>Route Name<input name="name" required /></label>
+              <label>Route Type
+                <select name="routeType">
+                  <option value="feeder">Feeder</option>
+                  <option value="distribution">Distribution</option>
+                  <option value="drop">Customer Drop</option>
+                </select>
+              </label>
+              <label>Core Count<input name="coreCount" type="number" /></label>
+              <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
+              <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
+              <label>Start Node
+                <select name="startNodeId">
+                  <option value="">No start node</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                </select>
+              </label>
+              <label>End Node
+                <select name="endNodeId">
+                  <option value="">No end node</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                </select>
+              </label>
+              <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
+              <div class="mapping-draft-note">
+                <strong>${state.mapDraftPoints.length}</strong>
+                <span>map points ready for route save</span>
+              </div>
+              <button class="primary-btn" type="submit">Save Drawn Route</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="split-grid dashboard-split">
+      <article class="panel">
+        <div class="section-head"><div><p class="eyebrow">Smart Notes</p><h2>Free Smart Suggestions</h2></div></div>
+        ${renderSmartMappingNotes(insights)}
+      </article>
+      <article class="panel">
+        <div class="section-head"><div><p class="eyebrow">Coverage Gaps</p><h2>Unmapped Customers</h2></div></div>
+        <div class="stack-list">
+          ${(insights.unmappedCustomers || []).length
+            ? insights.unmappedCustomers.map((item) => `
+              <article class="stack-card">
+                <div>
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <p>${escapeHtml(item.customerCode)} | ${escapeHtml(item.mobile)}</p>
+                </div>
+                <div>
+                  <strong>${escapeHtml(item.area || "-")}</strong>
+                  <p>Need endpoint survey</p>
+                </div>
+              </article>
+            `).join("")
+            : `<div class="empty-state">All visible customers ka map endpoint linked lag raha hai.</div>`}
+        </div>
+      </article>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">Mapped Nodes</p><h2>Node Registry</h2></div></div>
+      ${tableWrapper(renderNetworkNodeTable(data.networkNodes, data.customers))}
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">Fiber Routes</p><h2>Route Registry</h2></div></div>
+      ${tableWrapper(renderFiberRouteTable(data.fiberRoutes))}
+    </section>
+  `;
+}
+
+function initNetworkMap() {
+  const mapCanvas = document.getElementById("networkMapCanvas");
+  if (!mapCanvas || !window.L) return;
+
+  if (state.networkLeafletMap) {
+    state.networkLeafletMap.remove();
+    state.networkLeafletMap = null;
+  }
+
+  const nodes = state.data.networkNodes || [];
+  const routes = state.data.fiberRoutes || [];
+  const centerLat = nodes[0]?.latitude || 23.2599;
+  const centerLng = nodes[0]?.longitude || 77.4126;
+  const map = window.L.map(mapCanvas).setView([centerLat, centerLng], nodes.length ? 14 : 5);
+  state.networkLeafletMap = map;
+
+  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+
+  const markerColor = {
+    olt: "#0b57d0",
+    splitter: "#b68222",
+    fd_box: "#0b8f83",
+    joint: "#8b5cf6",
+    pole: "#475569",
+    customer_endpoint: "#d9485f",
+  };
+
+  nodes.forEach((node) => {
+    const marker = window.L.circleMarker([node.latitude, node.longitude], {
+      radius: node.type === "olt" ? 9 : 7,
+      color: markerColor[node.type] || "#0b57d0",
+      weight: 2,
+      fillOpacity: 0.9,
+    }).addTo(map);
+
+    marker.bindPopup(`
+      <div class="map-popup">
+        <strong>${escapeHtml(node.name)}</strong><br/>
+        <span>${escapeHtml(node.type)}</span><br/>
+        ${node.photoDataUrl ? `<img src="${escapeHtml(node.photoDataUrl)}" alt="${escapeHtml(node.name)}" style="width:160px;border-radius:12px;margin-top:10px;" />` : ""}
+      </div>
+    `);
+  });
+
+  routes.forEach((route) => {
+    const points = parseRoutePoints(route.pathJson).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+    if (points.length < 2) return;
+    window.L.polyline(points.map((item) => [item.lat, item.lng]), {
+      color: route.colorCode || "#0b57d0",
+      weight: route.routeType === "drop" ? 3 : 5,
+      opacity: 0.85,
+    }).addTo(map).bindPopup(`
+      <div class="map-popup">
+        <strong>${escapeHtml(route.name)}</strong><br/>
+        <span>${escapeHtml(route.routeType)} | ${route.coreCount || 0} core</span><br/>
+        <span>${Math.round(route.lengthMeters || 0)} meters</span>
+      </div>
+    `);
+  });
+
+  if (state.mapDraftPoints.length >= 2) {
+    window.L.polyline(state.mapDraftPoints.map((item) => [item.lat, item.lng]), {
+      color: "#ef4444",
+      weight: 4,
+      dashArray: "10,8",
+    }).addTo(map);
+  }
+
+  map.on("click", (event) => {
+    if (!state.mapDrawMode) return;
+    state.mapDraftPoints.push({
+      lat: Number(event.latlng.lat.toFixed(6)),
+      lng: Number(event.latlng.lng.toFixed(6)),
+    });
+    initNetworkMap();
+  });
+
+  if (nodes.length || routes.length || state.mapDraftPoints.length) {
+    const bounds = [];
+    nodes.forEach((node) => bounds.push([node.latitude, node.longitude]));
+    routes.forEach((route) => {
+      parseRoutePoints(route.pathJson).forEach((point) => bounds.push([point.lat, point.lng]));
+    });
+    state.mapDraftPoints.forEach((point) => bounds.push([point.lat, point.lng]));
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [24, 24] });
+    }
+  }
+}
+
 function renderOperatorView() {
   const root = document.getElementById("operatorContent");
   const data = state.data;
@@ -1598,10 +1943,14 @@ function renderOperatorView() {
         </div>
       </section>
     `,
+    mapping: renderMappingView(data, metrics),
   };
 
   root.innerHTML = views[state.operatorView];
   attachOperatorSectionEvents();
+  if (state.operatorView === "mapping") {
+    window.setTimeout(() => initNetworkMap(), 0);
+  }
 }
 
 function renderCustomerOptions(items, selectedId = "") {
@@ -2228,6 +2577,24 @@ async function handleOperatorAction(action, id) {
     await loadOperatorData();
     renderOperatorView();
     showStatus("Customer payment request rejected.");
+    return;
+  }
+
+  if (action === "delete-map-node") {
+    if (!window.confirm("Delete this map node?")) return;
+    await fetchJson(`/mapping/nodes/${id}`, { method: "DELETE" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Map node deleted.");
+    return;
+  }
+
+  if (action === "delete-map-route") {
+    if (!window.confirm("Delete this fiber route?")) return;
+    await fetchJson(`/mapping/routes/${id}`, { method: "DELETE" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Fiber route deleted.");
   }
 }
 
@@ -2523,6 +2890,89 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const startRouteDrawingBtn = document.getElementById("startRouteDrawingBtn");
+  if (startRouteDrawingBtn) {
+    startRouteDrawingBtn.addEventListener("click", () => {
+      state.mapDrawMode = true;
+      showStatus("Map par click karke fiber route points add karo.");
+      initNetworkMap();
+    });
+  }
+
+  const clearRouteDraftBtn = document.getElementById("clearRouteDraftBtn");
+  if (clearRouteDraftBtn) {
+    clearRouteDraftBtn.addEventListener("click", () => {
+      state.mapDraftPoints = [];
+      state.mapDrawMode = false;
+      renderOperatorView();
+      showStatus("Route draft clear ho gaya.");
+    });
+  }
+
+  const useCurrentLocationBtn = document.getElementById("useCurrentLocationBtn");
+  if (useCurrentLocationBtn) {
+    useCurrentLocationBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showStatus("Geolocation is browser me available nahi hai.", "error");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const latInput = document.getElementById("mapNodeLat");
+          const lngInput = document.getElementById("mapNodeLng");
+          if (latInput) latInput.value = String(position.coords.latitude.toFixed(6));
+          if (lngInput) lngInput.value = String(position.coords.longitude.toFixed(6));
+          showStatus("Current location form me aa gayi.");
+        },
+        () => showStatus("Current location fetch nahi hui.", "error"),
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    });
+  }
+
+  const mapNodeForm = document.getElementById("mapNodeForm");
+  if (mapNodeForm) {
+    mapNodeForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const photoFile = document.getElementById("mapNodePhoto")?.files?.[0];
+      const payload = Object.fromEntries(formData.entries());
+      if (photoFile) {
+        payload.photoDataUrl = await fileToDataUrl(photoFile);
+      }
+      await fetchJson("/mapping/nodes", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Map node saved successfully.");
+    });
+  }
+
+  const fiberRouteForm = document.getElementById("fiberRouteForm");
+  if (fiberRouteForm) {
+    fiberRouteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (state.mapDraftPoints.length < 2) {
+        showStatus("Route save karne se pehle map par kam se kam 2 points add karo.", "error");
+        return;
+      }
+      const formData = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(formData.entries());
+      payload.points = state.mapDraftPoints;
+      await fetchJson("/mapping/routes", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      state.mapDraftPoints = [];
+      state.mapDrawMode = false;
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Fiber route saved successfully.");
+    });
+  }
+
 }
 
 function attachAdminDetailEvents() {
@@ -2640,7 +3090,7 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings] =
+  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings, mappingOverview] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
@@ -2656,6 +3106,7 @@ async function loadOperatorData() {
       fetchJson("/acs/tasks"),
       fetchJson("/acs/events"),
       fetchJson("/settings"),
+      fetchJson("/mapping/overview"),
     ]);
 
   state.data.operators = operators.items;
@@ -2672,6 +3123,9 @@ async function loadOperatorData() {
   state.data.acsTasks = acsTasks.items;
   state.data.acsEvents = acsEvents.items;
   state.data.settings = settings.item;
+  state.data.networkNodes = mappingOverview.items?.nodes || [];
+  state.data.fiberRoutes = mappingOverview.items?.routes || [];
+  state.data.mapInsights = mappingOverview.items?.insights || null;
   updateWorkspaceBrand();
 }
 

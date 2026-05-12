@@ -33,6 +33,8 @@ model Tenant {
   onts               Ont[]
   acsTasks           AcsTask[]
   acsEvents          AcsEvent[]
+  networkNodes       NetworkNode[]
+  fiberRoutes        FiberRoute[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -273,4 +275,44 @@ model AcsEvent {
   status        String?
   details       String?
   createdAt     DateTime @default(now())
+}
+
+model NetworkNode {
+  id                String   @id
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  type              String
+  name              String
+  latitude          Float
+  longitude         Float
+  photoDataUrl      String?
+  note              String?
+  fiberCoreCount    Int?
+  splitterRatio     String?
+  capacity          Int?
+  colorCode         String?
+  relatedCustomerId String?
+  parentNodeId      String?
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model FiberRoute {
+  id           String   @id
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  routeType    String   @default("distribution")
+  pathJson     String
+  coreCount    Int      @default(0)
+  cableType    String?
+  colorCode    String?
+  startNodeId  String?
+  endNodeId    String?
+  note         String?
+  status       String   @default("active")
+  lengthMeters Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
