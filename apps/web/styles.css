@@ -760,6 +760,18 @@ button:hover,
   align-items: start;
 }
 
+.mapping-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  gap: 22px;
+  align-items: start;
+}
+
+.mapping-detail-main {
+  display: grid;
+  gap: 22px;
+}
+
 .mapping-map-wrap,
 .mapping-form-card {
   background: rgba(255, 255, 255, 0.78);
@@ -768,11 +780,21 @@ button:hover,
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 }
 
+.mapping-map-wrap-full {
+  padding: 0;
+  overflow: hidden;
+}
+
 .network-map-canvas {
   width: 100%;
   height: 560px;
   border-radius: 24px 24px 0 0;
   overflow: hidden;
+}
+
+.network-map-canvas-large {
+  height: min(74vh, 760px);
+  min-height: 560px;
 }
 
 .mapping-draft-bar {
@@ -786,6 +808,11 @@ button:hover,
 .mapping-side-panels {
   display: grid;
   gap: 18px;
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .mapping-form-card {
@@ -1426,7 +1453,8 @@ input[type="search"] {
   .customer-kpis,
   .operator-payment-preview-grid,
   .operator-hero-metrics,
-  .mapping-layout {
+  .mapping-layout,
+  .mapping-detail-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1459,5 +1487,21 @@ input[type="search"] {
   .customer-history-value {
     justify-items: start;
     text-align: left;
+  }
+
+  .network-map-canvas {
+    height: 360px;
+  }
+
+  .network-map-canvas-large {
+    height: 420px;
+    min-height: 420px;
+  }
+
+  .mapping-side-panels {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 }

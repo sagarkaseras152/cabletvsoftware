@@ -1222,7 +1222,6 @@ function renderFiberRouteTable(items) {
 function renderMappingView(data, metrics) {
   const insights = data.mapInsights || {};
   return `
-    ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
     <section class="panel">
       <div class="section-head">
         <div>
@@ -1232,136 +1231,138 @@ function renderMappingView(data, metrics) {
         </div>
       </div>
       ${renderMapInsightCards(insights)}
-      <div class="mapping-layout">
-        <div class="mapping-map-wrap">
-          <div id="networkMapCanvas" class="network-map-canvas"></div>
-          <div class="mapping-draft-bar">
-            <strong>Route Draft:</strong>
-            <span>${state.mapDraftPoints.length} points</span>
-            <button type="button" id="startRouteDrawingBtn" class="ghost-btn">${state.mapDrawMode ? "Drawing Active" : "Start Route Drawing"}</button>
-            <button type="button" id="clearRouteDraftBtn" class="ghost-btn">Clear Draft</button>
-          </div>
-        </div>
-        <div class="mapping-side-panels">
-          <div class="inline-form-block mapping-form-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Node Survey</p>
-                <h3>Add Map Node</h3>
-              </div>
-            </div>
-            <form id="mapNodeForm" class="form-grid">
-              <label>Node Type
-                <select name="type">
-                  <option value="olt">OLT</option>
-                  <option value="fd_box">FD Box</option>
-                  <option value="splitter">Splitter</option>
-                  <option value="joint">Joint</option>
-                  <option value="pole">Pole</option>
-                  <option value="customer_endpoint">Customer Endpoint</option>
-                </select>
-              </label>
-              <label>Name<input name="name" required /></label>
-              <label>Linked Customer
-                <select name="relatedCustomerId">
-                  <option value="">No customer mapping</option>
-                  ${renderCustomerOptions(data.customers)}
-                </select>
-              </label>
-              <label>Parent Splitter / Node
-                <select name="parentNodeId">
-                  <option value="">No parent</option>
-                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
-                </select>
-              </label>
-              <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
-              <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
-              <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
-              <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
-              <label>Capacity<input name="capacity" type="number" /></label>
-              <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
-              <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
-              <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
-              <div class="toolbar">
-                <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
-                <button class="primary-btn" type="submit">Save Node</button>
-              </div>
-            </form>
-          </div>
-          <div class="inline-form-block mapping-form-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Route Survey</p>
-                <h3>Save Fiber Route</h3>
-              </div>
-            </div>
-            <form id="fiberRouteForm" class="form-grid">
-              <label>Route Name<input name="name" required /></label>
-              <label>Route Type
-                <select name="routeType">
-                  <option value="feeder">Feeder</option>
-                  <option value="distribution">Distribution</option>
-                  <option value="drop">Customer Drop</option>
-                </select>
-              </label>
-              <label>Core Count<input name="coreCount" type="number" /></label>
-              <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
-              <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
-              <label>Start Node
-                <select name="startNodeId">
-                  <option value="">No start node</option>
-                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-                </select>
-              </label>
-              <label>End Node
-                <select name="endNodeId">
-                  <option value="">No end node</option>
-                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-                </select>
-              </label>
-              <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
-              <div class="mapping-draft-note">
-                <strong>${state.mapDraftPoints.length}</strong>
-                <span>map points ready for route save</span>
-              </div>
-              <button class="primary-btn" type="submit">Save Drawn Route</button>
-            </form>
-          </div>
+      <div class="mapping-map-wrap mapping-map-wrap-full">
+        <div id="networkMapCanvas" class="network-map-canvas network-map-canvas-large"></div>
+        <div class="mapping-draft-bar">
+          <strong>Route Draft:</strong>
+          <span>${state.mapDraftPoints.length} points</span>
+          <button type="button" id="startRouteDrawingBtn" class="ghost-btn">${state.mapDrawMode ? "Drawing Active" : "Start Route Drawing"}</button>
+          <button type="button" id="clearRouteDraftBtn" class="ghost-btn">Clear Draft</button>
         </div>
       </div>
     </section>
-    <section class="split-grid dashboard-split">
-      <article class="panel">
-        <div class="section-head"><div><p class="eyebrow">Smart Notes</p><h2>Free Smart Suggestions</h2></div></div>
-        ${renderSmartMappingNotes(insights)}
-      </article>
-      <article class="panel">
-        <div class="section-head"><div><p class="eyebrow">Coverage Gaps</p><h2>Unmapped Customers</h2></div></div>
-        <div class="stack-list">
-          ${(insights.unmappedCustomers || []).length
-            ? insights.unmappedCustomers.map((item) => `
-              <article class="stack-card">
-                <div>
-                  <strong>${escapeHtml(item.name)}</strong>
-                  <p>${escapeHtml(item.customerCode)} | ${escapeHtml(item.mobile)}</p>
-                </div>
-                <div>
-                  <strong>${escapeHtml(item.area || "-")}</strong>
-                  <p>Need endpoint survey</p>
-                </div>
-              </article>
-            `).join("")
-            : `<div class="empty-state">All visible customers ka map endpoint linked lag raha hai.</div>`}
+    <section class="mapping-detail-layout">
+      <div class="mapping-detail-main">
+        <section class="split-grid dashboard-split">
+          <article class="panel">
+            <div class="section-head"><div><p class="eyebrow">Smart Notes</p><h2>Free Smart Suggestions</h2></div></div>
+            ${renderSmartMappingNotes(insights)}
+          </article>
+          <article class="panel">
+            <div class="section-head"><div><p class="eyebrow">Coverage Gaps</p><h2>Unmapped Customers</h2></div></div>
+            <div class="stack-list">
+              ${(insights.unmappedCustomers || []).length
+                ? insights.unmappedCustomers.map((item) => `
+                  <article class="stack-card">
+                    <div>
+                      <strong>${escapeHtml(item.name)}</strong>
+                      <p>${escapeHtml(item.customerCode)} | ${escapeHtml(item.mobile)}</p>
+                    </div>
+                    <div>
+                      <strong>${escapeHtml(item.area || "-")}</strong>
+                      <p>Need endpoint survey</p>
+                    </div>
+                  </article>
+                `).join("")
+                : `<div class="empty-state">All visible customers ka map endpoint linked lag raha hai.</div>`}
+            </div>
+          </article>
+        </section>
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Mapped Nodes</p><h2>Node Registry</h2></div></div>
+          ${tableWrapper(renderNetworkNodeTable(data.networkNodes, data.customers))}
+        </section>
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Fiber Routes</p><h2>Route Registry</h2></div></div>
+          ${tableWrapper(renderFiberRouteTable(data.fiberRoutes))}
+        </section>
+      </div>
+      <aside class="mapping-side-panels">
+        <div class="inline-form-block mapping-form-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Node Survey</p>
+              <h3>Add Map Node</h3>
+            </div>
+          </div>
+          <form id="mapNodeForm" class="form-grid">
+            <label>Node Type
+              <select name="type">
+                <option value="olt">OLT</option>
+                <option value="fd_box">FD Box</option>
+                <option value="splitter">Splitter</option>
+                <option value="joint">Joint</option>
+                <option value="pole">Pole</option>
+                <option value="customer_endpoint">Customer Endpoint</option>
+              </select>
+            </label>
+            <label>Name<input name="name" required /></label>
+            <label>Linked Customer
+              <select name="relatedCustomerId">
+                <option value="">No customer mapping</option>
+                ${renderCustomerOptions(data.customers)}
+              </select>
+            </label>
+            <label>Parent Splitter / Node
+              <select name="parentNodeId">
+                <option value="">No parent</option>
+                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
+            <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
+            <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
+            <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
+            <label>Capacity<input name="capacity" type="number" /></label>
+            <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
+            <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
+            <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
+            <div class="toolbar">
+              <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
+              <button class="primary-btn" type="submit">Save Node</button>
+            </div>
+          </form>
         </div>
-      </article>
-    </section>
-    <section class="panel">
-      <div class="section-head"><div><p class="eyebrow">Mapped Nodes</p><h2>Node Registry</h2></div></div>
-      ${tableWrapper(renderNetworkNodeTable(data.networkNodes, data.customers))}
-    </section>
-    <section class="panel">
-      <div class="section-head"><div><p class="eyebrow">Fiber Routes</p><h2>Route Registry</h2></div></div>
-      ${tableWrapper(renderFiberRouteTable(data.fiberRoutes))}
+        <div class="inline-form-block mapping-form-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Route Survey</p>
+              <h3>Save Fiber Route</h3>
+            </div>
+          </div>
+          <form id="fiberRouteForm" class="form-grid">
+            <label>Route Name<input name="name" required /></label>
+            <label>Route Type
+              <select name="routeType">
+                <option value="feeder">Feeder</option>
+                <option value="distribution">Distribution</option>
+                <option value="drop">Customer Drop</option>
+              </select>
+            </label>
+            <label>Core Count<input name="coreCount" type="number" /></label>
+            <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
+            <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
+            <label>Start Node
+              <select name="startNodeId">
+                <option value="">No start node</option>
+                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label>End Node
+              <select name="endNodeId">
+                <option value="">No end node</option>
+                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
+            <div class="mapping-draft-note">
+              <strong>${state.mapDraftPoints.length}</strong>
+              <span>map points ready for route save</span>
+            </div>
+            <button class="primary-btn" type="submit">Save Drawn Route</button>
+          </form>
+        </div>
+      </aside>
     </section>
   `;
 }
