@@ -7,6 +7,7 @@ import customersRouter from "./customers.js";
 import expensesRouter from "./expenses.js";
 import healthRouter from "./health.js";
 import mappingRouter from "./mapping.js";
+import monitoringRouter from "./monitoring.js";
 import oltsRouter from "./olts.js";
 import operatorsRouter from "./operators.js";
 import ontsRouter from "./onts.js";
@@ -24,6 +25,7 @@ router.use("/auth", authRouter);
 router.use("/backup", backupRouter);
 router.use("/health", healthRouter);
 router.use("/mapping", mappingRouter);
+router.use("/monitoring", monitoringRouter);
 router.use("/acs", acsRouter);
 router.use("/blueprint", blueprintRouter);
 router.use("/operators", operatorsRouter);
@@ -59,6 +61,7 @@ router.get("/", (_req, res) => {
       expenses: "/api/expenses",
       settings: "/api/settings",
       mapping: "/api/mapping/overview",
+      monitoring: "/api/monitoring/overview",
       olts: "/api/olts",
       onts: "/api/onts",
       acsInform: "/api/acs/inform",

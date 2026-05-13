@@ -21,6 +21,7 @@ const operatorMenu = [
   { key: "expenses", title: "Expenses", description: "Operational cost" },
   { key: "mapping", title: "Mapping", description: "Fiber routes and field survey" },
   { key: "network", title: "Network", description: "OLT, ONT and ACS tasks" },
+  { key: "monitoring", title: "Monitoring", description: "Live device health and risk engine" },
   { key: "settings", title: "Settings", description: "Brand and billing rules" },
 ];
 
@@ -64,6 +65,9 @@ const state = {
     onts: [],
     acsTasks: [],
     acsEvents: [],
+    monitoredDevices: [],
+    deviceAlerts: [],
+    monitoringSummary: null,
     networkNodes: [],
     fiberRoutes: [],
     mapInsights: null,
@@ -1898,12 +1902,86 @@ function renderOperatorView() {
         </form>
         ${tableWrapper(renderAcsTaskTable(data.acsTasks, data.onts))}
       </section>
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Diagnostics</p><h2>ACS Event Log</h2></div></div>
-        ${tableWrapper(renderAcsEventTable(data.acsEvents, data.onts))}
-      </section>
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">Diagnostics</p><h2>ACS Event Log</h2></div></div>
+          ${tableWrapper(renderAcsEventTable(data.acsEvents, data.onts))}
+        </section>
       `,
-      settings: `
+    monitoring: `
+      ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Deep Monitoring</p><h2>Predictive Device Intelligence</h2><p class="subtle-note">OLT, ONT, switch, router ya kisi bhi field device ko secure ingest key se connect karo. System silence gap, packet loss, optical power aur thermal trend ko analyse karke future issue risk nikaalega.</p></div></div>
+        ${renderMonitoringSummary(data.monitoringSummary || {})}
+      </section>
+      <section class="split-grid dashboard-split">
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Device Onboarding</p><h2>Add Monitoring Device</h2></div></div>
+          <form id="monitoringDeviceForm" class="form-grid two-col-grid">
+            <label>Device Name<input name="name" required /></label>
+            <label>Type
+              <select name="deviceType">
+                <option value="olt">OLT</option>
+                <option value="ont">ONT</option>
+                <option value="switch">Switch</option>
+                <option value="router">Router</option>
+                <option value="firewall">Firewall</option>
+                <option value="ap">Access Point</option>
+              </select>
+            </label>
+            <label>Vendor<input name="vendor" /></label>
+            <label>Model<input name="model" /></label>
+            <label>Host / IP<input name="host" placeholder="192.168.1.1" /></label>
+            <label>Port<input name="port" type="number" value="161" /></label>
+            <label>Protocol
+              <select name="protocol">
+                <option value="snmp">SNMP / Agent</option>
+                <option value="http">HTTP Push</option>
+                <option value="syslog">Syslog Bridge</option>
+                <option value="custom">Custom Probe</option>
+              </select>
+            </label>
+            <label>Expected Heartbeat (sec)<input name="expectedIntervalSec" type="number" value="300" /></label>
+            <label>Linked OLT
+              <select name="linkedOltId">
+                <option value="">No OLT link</option>
+                ${renderOltOptions(data.olts)}
+              </select>
+            </label>
+            <label>Linked ONT
+              <select name="linkedOntId">
+                <option value="">No ONT link</option>
+                ${renderOntOptions(data.onts)}
+              </select>
+            </label>
+            <label>Linked Customer
+              <select name="linkedCustomerId">
+                <option value="">No customer link</option>
+                ${renderCustomerOptions(data.customers)}
+              </select>
+            </label>
+            <label>Note<input name="note" placeholder="Rack note, POP note, site details" /></label>
+            <div class="form-actions"><button class="primary-btn" type="submit">Create Monitoring Device</button></div>
+          </form>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Connection Model</p><h2>Always-On Analysis Flow</h2></div></div>
+          <div class="stack-list">
+            <article class="stack-card"><div><strong>1. Device create karo</strong><p>Software unique ingest key generate karega jo us device ke liye secure rahegi.</p></div></article>
+            <article class="stack-card"><div><strong>2. Agent / script / bridge connect karo</strong><p>Har 1-5 minute par telemetry push karo: CPU, memory, temperature, latency, packet loss, optical power.</p></div></article>
+            <article class="stack-card"><div><strong>3. Risk engine kaam karega</strong><p>Weak optical power, overheating, rising latency aur reporting silence se alerts aur future issue prediction niklegi.</p></div></article>
+          </div>
+        </article>
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Device Health</p><h2>Risk Analysis Table</h2></div></div>
+        ${tableWrapper(renderMonitoringDeviceTable(data.monitoredDevices))}
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Alert Feed</p><h2>Active Monitoring Alerts</h2></div></div>
+        ${tableWrapper(renderMonitoringAlertsTable(data.deviceAlerts))}
+      </section>
+    `,
+    settings: `
         ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
         <section class="panel">
           <div class="section-head"><div><p class="eyebrow">Settings</p><h2>Brand, Billing, Payment and ACS Settings</h2><p class="subtle-note">Business identity, payment instructions, billing rules aur ACS defaults ko operator side se fine-tune karo.</p></div></div>
@@ -2379,6 +2457,85 @@ function renderAcsEventTable(items, onts) {
   `;
 }
 
+function renderMonitoringSummary(summary = {}) {
+  return `
+    <div class="menu-grid operator-mini-grid">
+      <article class="menu-card operator-mini-card"><h3>Total Devices</h3><p>${summary.totalDevices || 0}</p><span>Routers, switches, OLTs, ONTs aur field devices</span></article>
+      <article class="menu-card operator-mini-card"><h3>Online</h3><p>${summary.onlineDevices || 0}</p><span>Latest telemetry receive hui devices</span></article>
+      <article class="menu-card operator-mini-card"><h3>Critical</h3><p>${summary.criticalDevices || 0}</p><span>Immediate action wali high-risk devices</span></article>
+      <article class="menu-card operator-mini-card"><h3>Warnings</h3><p>${summary.warningDevices || 0}</p><span>Behaviour degrade ho raha hai</span></article>
+      <article class="menu-card operator-mini-card"><h3>Open Alerts</h3><p>${summary.openAlerts || 0}</p><span>Operator acknowledgement ka wait</span></article>
+      <article class="menu-card operator-mini-card"><h3>High Risk</h3><p>${summary.highRiskDevices || 0}</p><span>Future issue prediction engine ne flag kiya</span></article>
+    </div>
+  `;
+}
+
+function renderMonitoringAlertsTable(items = []) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi koi monitoring alert detect nahi hua.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Severity</th><th>Device</th><th>Alert</th><th>Detail</th><th>Status</th><th>Last Seen</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td><span class="badge ${badgeClass(item.severity === "critical" ? "failed" : item.severity === "warning" ? "queued" : "active")}">${escapeHtml(item.severity)}</span></td>
+            <td>${escapeHtml(item.device?.name || item.deviceId || "-")}</td>
+            <td>${escapeHtml(item.title)}</td>
+            <td>${escapeHtml(item.detail || "-")}</td>
+            <td><span class="badge ${badgeClass(item.status === "open" ? "warning" : "success")}">${escapeHtml(item.status)}</span></td>
+            <td>${escapeHtml(formatDate(item.lastDetectedAt || item.updatedAt))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderMonitoringDeviceTable(items = []) {
+  if (!items.length) {
+    return `<div class="empty-state">Abhi koi monitored device add nahi hua.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Device</th><th>Type</th><th>Status</th><th>Risk</th><th>Live Metrics</th><th>Prediction</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${items.map((item) => {
+          const analysis = item.analysis || {};
+          const metrics = analysis.metrics || {};
+          const predicted = (analysis.predictedIssues || []).slice(0, 2).join(" | ") || "-";
+          return `
+            <tr>
+              <td>
+                ${escapeHtml(item.name)}
+                <br /><span class="subtle-note">${escapeHtml(item.host || "No host")} | ${escapeHtml(item.protocol || "-")}</span>
+              </td>
+              <td>${escapeHtml(item.deviceType)}</td>
+              <td><span class="badge ${badgeClass(analysis.healthStatus === "critical" ? "failed" : analysis.healthStatus === "warning" ? "queued" : item.status === "online" ? "active" : "offline")}">${escapeHtml(analysis.healthStatus || item.status || "unknown")}</span></td>
+              <td><strong>${item.riskScore ?? analysis.riskScore ?? 0}</strong><br /><span class="subtle-note">Last seen ${escapeHtml(formatDate(item.lastSeenAt))}</span></td>
+              <td>
+                CPU ${metrics.cpuPercent ?? item.cpuPercent ?? "-"}%<br />
+                Mem ${metrics.memoryPercent ?? item.memoryPercent ?? "-"}%<br />
+                Lat ${metrics.latencyMs ?? item.latencyMs ?? "-"} ms<br />
+                RX ${metrics.opticalRxPowerDbm ?? item.opticalRxPowerDbm ?? item.signalPowerDbm ?? "-"} dBm
+              </td>
+              <td>${escapeHtml(predicted)}</td>
+              <td>
+                <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
+                <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
+                <button class="ghost-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 function renderOperatorsAdminList(items) {
   if (!items.length) {
     return `<div class="empty-state">No business accounts created yet.</div>`;
@@ -2561,6 +2718,45 @@ async function handleOperatorAction(action, id) {
     } catch (_error) {
       showStatus("Package assigned hai, pehle customers reassign karo.", "error");
     }
+    return;
+  }
+
+  if (action === "copy-monitor-endpoint") {
+    const item = state.data.monitoredDevices.find((device) => device.id === id);
+    if (!item) return;
+    const endpoint = `${apiBase}/monitoring/ingest/${item.ingestKey}`;
+    const examplePayload = {
+      eventType: "telemetry",
+      status: "online",
+      cpuPercent: 42,
+      memoryPercent: 57,
+      temperatureC: 48,
+      latencyMs: 12,
+      packetLossPercent: 0,
+      opticalRxPowerDbm: -21.4,
+      opticalTxPowerDbm: 2.1,
+      message: "periodic device heartbeat",
+    };
+    const shareText = `${endpoint}\n\nPOST JSON example:\n${JSON.stringify(examplePayload, null, 2)}`;
+    await copyText(shareText);
+    showStatus("Monitoring ingest endpoint copied.");
+    return;
+  }
+
+  if (action === "regen-monitor-key") {
+    await fetchJson(`/monitoring/devices/${id}/regenerate-key`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Monitoring ingest key regenerate ho gayi.");
+    return;
+  }
+
+  if (action === "delete-monitor-device") {
+    if (!window.confirm("Delete this monitoring device?")) return;
+    await fetchJson(`/monitoring/devices/${id}`, { method: "DELETE" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Monitoring device deleted.");
     return;
   }
 
@@ -2876,6 +3072,21 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const monitoringDeviceForm = document.getElementById("monitoringDeviceForm");
+  if (monitoringDeviceForm) {
+    monitoringDeviceForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      await fetchJson("/monitoring/devices", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Monitoring device add ho gaya. Ab ingest endpoint copy karke telemetry push kar sakte ho.");
+    });
+  }
+
   const settingsForm = document.getElementById("settingsForm");
   if (settingsForm) {
     settingsForm.addEventListener("submit", async (event) => {
@@ -3091,7 +3302,7 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings, mappingOverview] =
+  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings, mappingOverview, monitoringOverview] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
@@ -3108,6 +3319,7 @@ async function loadOperatorData() {
       fetchJson("/acs/events"),
       fetchJson("/settings"),
       fetchJson("/mapping/overview"),
+      fetchJson("/monitoring/overview"),
     ]);
 
   state.data.operators = operators.items;
@@ -3127,6 +3339,9 @@ async function loadOperatorData() {
   state.data.networkNodes = mappingOverview.items?.nodes || [];
   state.data.fiberRoutes = mappingOverview.items?.routes || [];
   state.data.mapInsights = mappingOverview.items?.insights || null;
+  state.data.monitoredDevices = monitoringOverview.items?.devices || [];
+  state.data.deviceAlerts = monitoringOverview.items?.alerts || [];
+  state.data.monitoringSummary = monitoringOverview.items?.summary || null;
   updateWorkspaceBrand();
 }
 

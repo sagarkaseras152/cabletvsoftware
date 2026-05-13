@@ -22,6 +22,9 @@ const modelOrder = [
   ["onts", prisma.ont],
   ["acsTasks", prisma.acsTask],
   ["acsEvents", prisma.acsEvent],
+  ["monitoredDevices", prisma.monitoredDevice],
+  ["deviceSnapshots", prisma.deviceSnapshot],
+  ["deviceAlerts", prisma.deviceAlert],
   ["networkNodes", prisma.networkNode],
   ["fiberRoutes", prisma.fiberRoute],
 ];
