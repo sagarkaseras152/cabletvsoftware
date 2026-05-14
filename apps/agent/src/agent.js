@@ -149,11 +149,17 @@ function walkOidColumn(session, baseOid) {
 }
 
 async function collectInterfaceInventory(session) {
-  const columns = await Promise.all(
-    Object.entries(interfaceOidColumns).map(async ([key, oid]) => [key, await walkOidColumn(session, oid)]),
-  );
+  const columnMap = {};
+  const errors = [];
+  for (const [key, oid] of Object.entries(interfaceOidColumns)) {
+    try {
+      columnMap[key] = await walkOidColumn(session, oid);
+    } catch (error) {
+      columnMap[key] = new Map();
+      errors.push(`${key}: ${error.message}`);
+    }
+  }
 
-  const columnMap = Object.fromEntries(columns);
   const indexes = new Set();
   Object.values(columnMap).forEach((map) => {
     for (const key of map.keys()) indexes.add(key);
@@ -184,7 +190,10 @@ async function collectInterfaceInventory(session) {
     .filter((item) => item.name || item.descr)
     .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
 
-  return items;
+  return {
+    items,
+    fetchMessage: errors.length ? `Partial interface walk: ${errors.join(" | ")}` : "",
+  };
 }
 
 async function runSnmpPollTask(task) {
@@ -250,11 +259,13 @@ async function runSnmpPollTask(task) {
       });
 
       collectInterfaceInventory(session)
-        .then((interfaces) => {
+        .then((inventory) => {
+          const interfaces = inventory.items || [];
           resultJson.interfaceDownCount = interfaces.filter((item) => !item.running && !item.disabled).length;
           resultJson.interfacesJson = JSON.stringify({
             source: "edge_snmp_if_mib",
             itemCount: interfaces.length,
+            fetchMessage: inventory.fetchMessage || "",
             items: interfaces,
           });
         })
