@@ -334,10 +334,19 @@ model MonitoredDevice {
   host                 String?
   port                 Int?
   protocol             String   @default("snmp")
+  monitorMode          String   @default("push")
   ingestKey            String   @unique
   expectedIntervalSec  Int      @default(300)
+  pollEnabled          Boolean  @default(false)
+  pollPath             String?
+  pollTimeoutMs        Int      @default(5000)
+  authUsername         String?
+  authPassword         String?
   status               String   @default("unknown")
   lastSeenAt           DateTime?
+  lastPollAt           DateTime?
+  lastPollStatusCode   Int?
+  pollFailures         Int      @default(0)
   cpuPercent           Float?
   memoryPercent        Float?
   temperatureC         Float?

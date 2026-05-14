@@ -1934,13 +1934,29 @@ function renderOperatorView() {
             <label>Port<input name="port" type="number" value="161" /></label>
             <label>Protocol
               <select name="protocol">
-                <option value="snmp">SNMP / Agent</option>
-                <option value="http">HTTP Push</option>
-                <option value="syslog">Syslog Bridge</option>
-                <option value="custom">Custom Probe</option>
+                <option value="tcp">TCP Port Check</option>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+                <option value="custom">Custom / Future</option>
+              </select>
+            </label>
+            <label>Mode
+              <select name="monitorMode">
+                <option value="active_poll">Active Poll from server</option>
+                <option value="push">Device/Agent Push Telemetry</option>
               </select>
             </label>
             <label>Expected Heartbeat (sec)<input name="expectedIntervalSec" type="number" value="300" /></label>
+            <label>Poll Path<input name="pollPath" value="/" placeholder="/status /login /" /></label>
+            <label>Poll Timeout (ms)<input name="pollTimeoutMs" type="number" value="5000" /></label>
+            <label>Auth User<input name="authUsername" placeholder="optional" /></label>
+            <label>Auth Password<input name="authPassword" placeholder="optional" /></label>
+            <label>Enable Active Poll
+              <select name="pollEnabled">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
             <label>Linked OLT
               <select name="linkedOltId">
                 <option value="">No OLT link</option>
@@ -2525,6 +2541,7 @@ function renderMonitoringDeviceTable(items = []) {
               <td>${escapeHtml(predicted)}</td>
               <td>
                 <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
+                <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>
                 <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
                 <button class="ghost-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
               </td>
@@ -2748,6 +2765,14 @@ async function handleOperatorAction(action, id) {
     await loadOperatorData();
     renderOperatorView();
     showStatus("Monitoring ingest key regenerate ho gayi.");
+    return;
+  }
+
+  if (action === "poll-monitor-device") {
+    await fetchJson(`/monitoring/devices/${id}/poll`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Manual poll complete ho gaya.");
     return;
   }
 
@@ -3077,9 +3102,11 @@ function attachOperatorSectionEvents() {
     monitoringDeviceForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(formData.entries());
+      payload.pollEnabled = payload.pollEnabled === "true";
       await fetchJson("/monitoring/devices", {
         method: "POST",
-        body: JSON.stringify(Object.fromEntries(formData.entries())),
+        body: JSON.stringify(payload),
       });
       await loadOperatorData();
       renderOperatorView();

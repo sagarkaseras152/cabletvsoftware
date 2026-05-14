@@ -7,6 +7,7 @@ import { tenantContext } from "./middleware/tenantContext.js";
 import routes from "./routes/index.js";
 import { seedDatabase } from "./seed.js";
 import { ensureAuthState } from "./services/authService.js";
+import { startMonitoringPoller } from "./services/monitoringPoller.js";
 
 const app = express();
 
@@ -35,6 +36,7 @@ ensureAuthState().then(() => {
   prisma.$connect()
     .then(seedDatabase)
     .then(() => {
+      startMonitoringPoller();
       app.listen(config.port, () => {
         console.log(`${config.appName} listening on port ${config.port}`);
       });
