@@ -15,8 +15,9 @@ const builtinOidProfiles = {
 };
 
 function parseOidMap(device) {
-  const base = device.metricProfile && builtinOidProfiles[device.metricProfile]
-    ? { ...builtinOidProfiles[device.metricProfile] }
+  const profileKey = device.metricProfile || "generic_system";
+  const base = builtinOidProfiles[profileKey]
+    ? { ...builtinOidProfiles[profileKey] }
     : {};
 
   if (!device.customOidMapJson) return base;
@@ -54,7 +55,7 @@ function probeSnmp(device) {
         statusCode: 400,
         message: !device.snmpCommunity
           ? "SNMP community missing"
-          : "SNMP OID map missing. Add custom OIDs or metric profile.",
+          : `SNMP OID map missing for profile ${device.metricProfile || "generic_system"}`,
       });
       return;
     }
@@ -74,7 +75,7 @@ function probeSnmp(device) {
           ok: false,
           latencyMs: Date.now() - startedAt,
           statusCode: 503,
-          message: error.message,
+          message: `SNMP error: ${error.message}`,
         });
         return;
       }
@@ -88,7 +89,7 @@ function probeSnmp(device) {
         ok: true,
         latencyMs: Date.now() - startedAt,
         statusCode: 200,
-        message: `SNMP ${fields.length} metrics collected`,
+        message: `SNMP success: ${fields.length} OIDs collected`,
         metrics,
       });
     });

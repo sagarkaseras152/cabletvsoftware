@@ -1949,8 +1949,8 @@ function renderOperatorView() {
             <label>SNMP Community<input name="snmpCommunity" placeholder="public / readonly community" /></label>
             <label>Metric Profile
               <select name="metricProfile">
+                <option value="generic_system">Generic System (uptime test)</option>
                 <option value="">Custom OID Map</option>
-                <option value="generic_system">Generic System</option>
               </select>
             </label>
             <label>Mode
@@ -2545,7 +2545,11 @@ function renderMonitoringDeviceTable(items = []) {
               </td>
               <td>${escapeHtml(item.deviceType)}</td>
               <td><span class="badge ${badgeClass(analysis.healthStatus === "critical" ? "failed" : analysis.healthStatus === "warning" ? "queued" : item.status === "online" ? "active" : "offline")}">${escapeHtml(analysis.healthStatus || item.status || "unknown")}</span></td>
-              <td><strong>${item.riskScore ?? analysis.riskScore ?? 0}</strong><br /><span class="subtle-note">Last seen ${escapeHtml(formatDate(item.lastSeenAt))}</span></td>
+              <td>
+                <strong>${item.riskScore ?? analysis.riskScore ?? 0}</strong><br />
+                <span class="subtle-note">Last seen ${escapeHtml(formatDate(item.lastSeenAt))}</span><br />
+                <span class="subtle-note">${escapeHtml(item.lastEventMessage || "No probe detail yet")}</span>
+              </td>
               <td>
                 CPU ${metrics.cpuPercent ?? item.cpuPercent ?? "-"}%<br />
                 Mem ${metrics.memoryPercent ?? item.memoryPercent ?? "-"}%<br />
@@ -2554,7 +2558,7 @@ function renderMonitoringDeviceTable(items = []) {
                 TX ${metrics.opticalTxPowerDbm ?? item.opticalTxPowerDbm ?? "-"} dBm<br />
                 ONU Off ${metrics.onuOfflineCount ?? item.onuOfflineCount ?? "-"} | Alarms ${metrics.activeAlarmCount ?? item.activeAlarmCount ?? "-"}
               </td>
-              <td>${escapeHtml(predicted)}</td>
+              <td>${escapeHtml(predicted)}<br /><span class="subtle-note">Poll code ${escapeHtml(String(item.lastPollStatusCode ?? "-"))}</span></td>
               <td>
                 <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
                 <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>

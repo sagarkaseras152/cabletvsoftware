@@ -106,7 +106,7 @@ router.post("/devices", async (req, res) => {
       protocol: payload.protocol || "snmp",
       snmpVersion: payload.snmpVersion || "2c",
       snmpCommunity: payload.snmpCommunity || null,
-      metricProfile: payload.metricProfile || null,
+      metricProfile: payload.metricProfile || (payload.protocol === "snmp" ? "generic_system" : null),
       customOidMapJson: payload.customOidMapJson || null,
       monitorMode: payload.monitorMode || "push",
       ingestKey: makeIngestKey(),
