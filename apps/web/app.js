@@ -2753,6 +2753,7 @@ function renderMonitoringDeviceTable(items = []) {
                   <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
                   <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>
                   ${item.protocol === "snmp" ? `<button class="ghost-btn action-btn" data-action="test-snmp-device" data-id="${item.id}">SNMP Test</button>` : ""}
+                  ${item.protocol === "snmp" && item.edgeAgentId ? `<button class="ghost-btn action-btn" data-action="snmp-walk-device" data-id="${item.id}">SNMP Walk</button>` : ""}
                   <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
                   <button class="ghost-btn danger-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
                 </div>
@@ -3130,6 +3131,19 @@ async function handleOperatorAction(action, id) {
     state.selectedMonitoringDeviceId = id;
     renderOperatorView();
     showStatus("Device detail panel update ho gaya.", "success");
+    return;
+  }
+
+  if (action === "snmp-walk-device") {
+    const baseOid = window.prompt("SNMP walk base OID", "1.3.6.1.2.1");
+    if (!baseOid) return;
+    await fetchJson(`/monitoring/devices/${id}/snmp-walk`, {
+      method: "POST",
+      body: JSON.stringify({ baseOid, maxEntries: 240 }),
+    });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("SNMP raw walk queue ho gayi. Edge Agent task history me result check karo.");
     return;
   }
 

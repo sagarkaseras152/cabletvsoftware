@@ -86,7 +86,7 @@ router.post("/agent/tasks/:id/result", async (req, res) => {
     where: { id: task.id },
     data: {
       status: payload.status || "completed",
-      resultJson: payload.resultJson ? JSON.stringify(payload.resultJson).slice(0, 4000) : null,
+      resultJson: payload.resultJson ? JSON.stringify(payload.resultJson).slice(0, 20000) : null,
       errorMessage: payload.errorMessage ? String(payload.errorMessage).slice(0, 500) : null,
       completedAt: new Date(),
     },

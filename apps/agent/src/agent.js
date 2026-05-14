@@ -112,6 +112,12 @@ function decodeSnmpRaw(raw) {
   return raw;
 }
 
+function stringifySnmpValue(raw) {
+  const value = decodeSnmpRaw(raw);
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
 function classifyInterfaceName(name = "", descr = "") {
   const source = `${name} ${descr}`.toLowerCase();
   if (source.includes("pon")) return "pon";
@@ -271,12 +277,79 @@ async function runSnmpPollTask(task) {
   });
 }
 
+async function runSnmpWalkTask(task) {
+  const payload = task.payloadJson ? JSON.parse(task.payloadJson) : {};
+  if (!payload.host) {
+    return {
+      status: "failed",
+      errorMessage: "host missing for snmp walk",
+    };
+  }
+  if (!payload.snmpCommunity) {
+    return {
+      status: "failed",
+      errorMessage: "SNMP community missing",
+    };
+  }
+
+  const baseOid = String(payload.baseOid || "1.3.6.1.2.1").trim();
+  const maxEntries = Math.max(20, Math.min(Number(payload.maxEntries || 240), 600));
+  const session = snmp.createSession(payload.host, payload.snmpCommunity, {
+    port: Number(payload.port || 161),
+    retries: 1,
+    timeout: Number(payload.pollTimeoutMs || 5000),
+    version: resolveSnmpVersion(payload.snmpVersion),
+  });
+
+  return new Promise((resolve) => {
+    const items = [];
+    session.subtree(
+      baseOid,
+      (varbinds) => {
+        for (const varbind of varbinds) {
+          if (!varbind || snmp.isVarbindError(varbind)) continue;
+          if (items.length >= maxEntries) break;
+          items.push({
+            oid: String(varbind.oid || ""),
+            type: String(varbind.type ?? ""),
+            value: stringifySnmpValue(varbind.value).slice(0, 240),
+          });
+        }
+      },
+      (error) => {
+        session.close();
+        if (error) {
+          resolve({
+            status: "failed",
+            errorMessage: `SNMP walk error: ${error.message}`,
+          });
+          return;
+        }
+
+        resolve({
+          status: "completed",
+          resultJson: {
+            message: `SNMP walk success: ${items.length} entries from ${baseOid}`,
+            baseOid,
+            itemCount: items.length,
+            items,
+          },
+        });
+      },
+      { maxRepetitions: 12 },
+    );
+  });
+}
+
 async function handleTask(task) {
   if (task.taskType === "ping") {
     return runPingTask(task);
   }
   if (task.taskType === "snmp_poll") {
     return runSnmpPollTask(task);
+  }
+  if (task.taskType === "snmp_walk") {
+    return runSnmpWalkTask(task);
   }
   return {
     status: "failed",

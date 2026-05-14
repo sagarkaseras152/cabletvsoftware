@@ -248,6 +248,43 @@ router.post("/devices/:id/poll", async (req, res) => {
   res.json({ ok: true, ...response, message: "Manual poll complete" });
 });
 
+router.post("/devices/:id/snmp-walk", async (req, res) => {
+  const existing = await prisma.monitoredDevice.findFirst({
+    where: { id: req.params.id, tenantId: req.context.tenantId },
+  });
+  if (!existing) return res.status(404).json({ ok: false, message: "Monitoring device not found" });
+  if (String(existing.protocol || "").toLowerCase() !== "snmp") {
+    return res.status(400).json({ ok: false, message: "SNMP walk sirf SNMP devices ke liye available hai" });
+  }
+  if (!existing.edgeAgentId) {
+    return res.status(400).json({ ok: false, message: "SNMP walk ke liye edge agent linked hona chahiye" });
+  }
+
+  const payload = req.body || {};
+  const task = await prisma.edgeTask.create({
+    data: {
+      id: makeId("atask"),
+      tenantId: req.context.tenantId,
+      agentId: existing.edgeAgentId,
+      taskType: "snmp_walk",
+      targetHost: existing.host || null,
+      targetPort: existing.port || 161,
+      payloadJson: JSON.stringify({
+        deviceId: existing.id,
+        host: existing.host,
+        port: existing.port || 161,
+        snmpCommunity: existing.snmpCommunity,
+        snmpVersion: existing.snmpVersion || "2c",
+        pollTimeoutMs: existing.pollTimeoutMs || 5000,
+        baseOid: payload.baseOid || "1.3.6.1.2.1",
+        maxEntries: safeInt(payload.maxEntries) || 240,
+      }),
+    },
+  });
+
+  res.status(201).json({ ok: true, item: task, message: "SNMP raw walk queued" });
+});
+
 router.post("/devices/:id/ports/:portId/:command", async (req, res) => {
   const existing = await prisma.monitoredDevice.findFirst({
     where: { id: req.params.id, tenantId: req.context.tenantId },
