@@ -1914,13 +1914,13 @@ function renderOperatorView() {
     monitoring: `
       ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Deep Monitoring</p><h2>Predictive Device Intelligence</h2><p class="subtle-note">OLT, ONT, switch, router ya kisi bhi field device ko secure ingest key se connect karo. System silence gap, packet loss, optical power aur thermal trend ko analyse karke future issue risk nikaalega.</p></div></div>
+        <div class="section-head"><div><p class="eyebrow">Deep Monitoring</p><h2>Predictive Device Intelligence</h2><p class="subtle-note">OLT, ONT, switch, router ya kisi bhi field device ko clean control-room layout me onboard, poll aur troubleshoot karo. Risk, alerts, interfaces aur edge-assisted access sab ek hi screen par aligned rahenge.</p></div></div>
         ${renderMonitoringSummary(data.monitoringSummary || {})}
       </section>
-      <section class="split-grid dashboard-split">
-        <article class="panel">
-          <div class="section-head"><div><p class="eyebrow">Device Onboarding</p><h2>Add Monitoring Device</h2></div></div>
-          <form id="monitoringDeviceForm" class="form-grid two-col-grid">
+      <section class="monitoring-command-grid">
+        <article class="panel monitoring-form-panel">
+          <div class="section-head"><div><p class="eyebrow">Device Onboarding</p><h2>Add Monitoring Device</h2><p class="subtle-note">Server-side poll, edge-agent SNMP ya telemetry push me se jo real path ho uske hisaab se device banao.</p></div></div>
+          <form id="monitoringDeviceForm" class="form-grid two-col-grid monitoring-form-grid">
             <label>Device Name<input name="name" required /></label>
             <label>Type
               <select name="deviceType">
@@ -1977,7 +1977,7 @@ function renderOperatorView() {
             <label>Poll Timeout (ms)<input name="pollTimeoutMs" type="number" value="5000" /></label>
             <label>Auth User<input name="authUsername" placeholder="optional" /></label>
             <label>Auth Password<input name="authPassword" placeholder="optional" /></label>
-            <div class="subtle-note">MikroTik ke liye MikroTik REST (HTTPS) select karo, correct login do, aur router par www-ssl / REST enabled hona chahiye.</div>
+            <div class="monitoring-inline-note">MikroTik ke liye sahi protocol, login aur REST service zaroor do. Local OLT ya switch ke liye edge-agent SNMP use karna zyada practical rahega.</div>
             <label>Enable Active Poll
               <select name="pollEnabled">
                 <option value="true">Yes</option>
@@ -2007,26 +2007,61 @@ function renderOperatorView() {
             <div class="form-actions"><button class="primary-btn" type="submit">Create Monitoring Device</button></div>
           </form>
         </article>
-        <article class="panel">
-          <div class="section-head"><div><p class="eyebrow">Connection Model</p><h2>Always-On Analysis Flow</h2></div></div>
-          <div class="stack-list">
-            <article class="stack-card"><div><strong>1. Device create karo</strong><p>Software unique ingest key generate karega jo us device ke liye secure rahegi.</p></div></article>
-            <article class="stack-card"><div><strong>2. SNMP ya push connect karo</strong><p>Static IP reachable ho to SNMP community + vendor OIDs do. Warna device/agent push telemetry use karo.</p></div></article>
-            <article class="stack-card"><div><strong>3. Risk engine kaam karega</strong><p>Weak optical power, ONU offline count, alarms, overheating, rising latency aur reporting silence se alerts aur future issue prediction niklegi.</p></div></article>
+        <article class="panel monitoring-side-panel">
+          <div class="section-head"><div><p class="eyebrow">Live Ops Guide</p><h2>What To Connect</h2><p class="subtle-note">Yahan se operator ko quickly samajh aa jaye ki kaunsi device kaunsa mode use karegi.</p></div></div>
+          <div class="monitoring-guide-grid">
+            <article class="monitoring-guide-card">
+              <span class="monitoring-guide-kicker">MikroTik / Public Router</span>
+              <strong>REST + Auth</strong>
+              <p>Public IP, login aur correct HTTP/HTTPS port do. Interface list aur port actions isi path se aayenge.</p>
+            </article>
+            <article class="monitoring-guide-card">
+              <span class="monitoring-guide-kicker">OLT / Switch / Local SNMP</span>
+              <strong>Edge Agent SNMP</strong>
+              <p>Local IP ya VPN-side devices ke liye online edge agent choose karo, warna cloud poll timeout deta rahega.</p>
+            </article>
+            <article class="monitoring-guide-card">
+              <span class="monitoring-guide-kicker">Custom Telemetry</span>
+              <strong>Push Ingest</strong>
+              <p>Secure ingest key ke through CPU, optical power, alarms ya device heartbeat directly bhej sakte ho.</p>
+            </article>
+          </div>
+          <div class="monitoring-mini-strip">
+            <article class="monitoring-mini-card">
+              <span>Edge Agents Online</span>
+              <strong>${(data.edgeAgents || []).filter((item) => item.status === "online").length}</strong>
+            </article>
+            <article class="monitoring-mini-card">
+              <span>Server Poll Devices</span>
+              <strong>${(data.monitoredDevices || []).filter((item) => item.monitorMode === "active_poll").length}</strong>
+            </article>
+            <article class="monitoring-mini-card">
+              <span>Edge SNMP Devices</span>
+              <strong>${(data.monitoredDevices || []).filter((item) => item.monitorMode === "edge_agent_snmp").length}</strong>
+            </article>
           </div>
         </article>
       </section>
       <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Device Health</p><h2>Risk Analysis Table</h2></div></div>
+        <div class="section-head">
+          <div><p class="eyebrow">Device Health</p><h2>Risk Analysis Table</h2><p class="subtle-note">Delete, poll, regenerate key aur live health sab isi list se manage karo.</p></div>
+          <div class="monitoring-table-summary">
+            <span>${(data.monitoredDevices || []).length} devices</span>
+            <span>${(data.monitoredDevices || []).filter((item) => item.status === "online").length} online</span>
+            <span>${(data.monitoredDevices || []).filter((item) => item.status !== "online").length} offline / unknown</span>
+          </div>
+        </div>
         ${tableWrapper(renderMonitoringDeviceTable(data.monitoredDevices))}
       </section>
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Alert Feed</p><h2>Active Monitoring Alerts</h2></div></div>
-        ${tableWrapper(renderMonitoringAlertsTable(data.deviceAlerts))}
-      </section>
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">Ports & Interfaces</p><h2>Live Port Status</h2><p class="subtle-note">MikroTik REST ya future vendor adapters se live interface state aur actions yahin dikhengi.</p></div></div>
-        ${tableWrapper(renderMonitoringPortTable(data.monitoredDevices))}
+      <section class="monitoring-bottom-grid">
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Alert Feed</p><h2>Active Monitoring Alerts</h2></div></div>
+          ${tableWrapper(renderMonitoringAlertsTable(data.deviceAlerts))}
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Ports & Interfaces</p><h2>Live Port Status</h2><p class="subtle-note">MikroTik REST ya future vendor adapters se live interface state aur actions yahin dikhengi.</p></div></div>
+          ${tableWrapper(renderMonitoringPortTable(data.monitoredDevices))}
+        </article>
       </section>
     `,
     edge: `
@@ -2553,13 +2588,13 @@ function renderAcsEventTable(items, onts) {
 
 function renderMonitoringSummary(summary = {}) {
   return `
-    <div class="menu-grid operator-mini-grid">
-      <article class="menu-card operator-mini-card"><h3>Total Devices</h3><p>${summary.totalDevices || 0}</p><span>Routers, switches, OLTs, ONTs aur field devices</span></article>
-      <article class="menu-card operator-mini-card"><h3>Online</h3><p>${summary.onlineDevices || 0}</p><span>Latest telemetry receive hui devices</span></article>
-      <article class="menu-card operator-mini-card"><h3>Critical</h3><p>${summary.criticalDevices || 0}</p><span>Immediate action wali high-risk devices</span></article>
-      <article class="menu-card operator-mini-card"><h3>Warnings</h3><p>${summary.warningDevices || 0}</p><span>Behaviour degrade ho raha hai</span></article>
-      <article class="menu-card operator-mini-card"><h3>Open Alerts</h3><p>${summary.openAlerts || 0}</p><span>Operator acknowledgement ka wait</span></article>
-      <article class="menu-card operator-mini-card"><h3>High Risk</h3><p>${summary.highRiskDevices || 0}</p><span>Future issue prediction engine ne flag kiya</span></article>
+    <div class="menu-grid operator-mini-grid monitoring-summary-grid">
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>Total Devices</h3><p>${summary.totalDevices || 0}</p><span>Routers, switches, OLTs aur field devices</span></article>
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>Online</h3><p>${summary.onlineDevices || 0}</p><span>Latest telemetry receive hui devices</span></article>
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>Critical</h3><p>${summary.criticalDevices || 0}</p><span>Immediate action wali high-risk devices</span></article>
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>Warnings</h3><p>${summary.warningDevices || 0}</p><span>Behaviour degrade ho raha hai</span></article>
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>Open Alerts</h3><p>${summary.openAlerts || 0}</p><span>Operator acknowledgement ka wait</span></article>
+      <article class="menu-card operator-mini-card monitoring-summary-card"><h3>High Risk</h3><p>${summary.highRiskDevices || 0}</p><span>Prediction engine ne flag kiya</span></article>
     </div>
   `;
 }
@@ -2604,8 +2639,11 @@ function renderMonitoringDeviceTable(items = []) {
           return `
             <tr>
               <td>
-                ${escapeHtml(item.name)}
-                <br /><span class="subtle-note">${escapeHtml(item.host || "No host")} | ${escapeHtml(item.protocol || "-")}</span>
+                <div class="monitoring-device-cell">
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <span class="subtle-note">${escapeHtml(item.host || "No host")} | ${escapeHtml(item.protocol || "-")}</span>
+                  <span class="subtle-note">${escapeHtml(item.monitorMode || "push")} | ${escapeHtml(item.vendor || "Unknown vendor")}${item.model ? ` | ${escapeHtml(item.model)}` : ""}</span>
+                </div>
               </td>
               <td>${escapeHtml(item.deviceType)}</td>
               <td><span class="badge ${badgeClass(analysis.healthStatus === "critical" ? "failed" : analysis.healthStatus === "warning" ? "queued" : item.status === "online" ? "active" : "offline")}">${escapeHtml(analysis.healthStatus || item.status || "unknown")}</span></td>
@@ -2624,10 +2662,12 @@ function renderMonitoringDeviceTable(items = []) {
               </td>
               <td>${escapeHtml(predicted)}<br /><span class="subtle-note">Poll code ${escapeHtml(String(item.lastPollStatusCode ?? "-"))}</span></td>
               <td>
-                <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
-                <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>
-                <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
-                <button class="ghost-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
+                <div class="monitoring-action-group">
+                  <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
+                  <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>
+                  <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
+                  <button class="ghost-btn danger-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
+                </div>
               </td>
             </tr>
           `;
@@ -2991,10 +3031,16 @@ async function handleOperatorAction(action, id) {
 
   if (action === "delete-monitor-device") {
     if (!window.confirm("Delete this monitoring device?")) return;
-    await fetchJson(`/monitoring/devices/${id}`, { method: "DELETE" });
-    await loadOperatorData();
-    renderOperatorView();
-    showStatus("Monitoring device deleted.");
+    try {
+      const response = await fetchJson(`/monitoring/devices/${id}`, { method: "DELETE" });
+      state.data.monitoredDevices = (state.data.monitoredDevices || []).filter((item) => item.id !== id);
+      state.data.deviceAlerts = (state.data.deviceAlerts || []).filter((item) => item.deviceId !== id);
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus(response.message || "Monitoring device deleted.");
+    } catch (error) {
+      showStatus(parseErrorMessage(error, "Monitoring device delete nahi hua."), "error");
+    }
     return;
   }
 
@@ -3358,6 +3404,7 @@ function attachOperatorSectionEvents() {
   if (monitoringDeviceForm) {
     monitoringDeviceForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const form = event.currentTarget;
       const formData = new FormData(event.currentTarget);
       const payload = Object.fromEntries(formData.entries());
       payload.pollEnabled = payload.pollEnabled === "true";
@@ -3365,6 +3412,7 @@ function attachOperatorSectionEvents() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      form.reset();
       await loadOperatorData();
       renderOperatorView();
       showStatus("Monitoring device add ho gaya. Ab ingest endpoint copy karke telemetry push kar sakte ho.");

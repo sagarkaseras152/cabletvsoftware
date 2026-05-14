@@ -293,9 +293,12 @@ router.delete("/devices/:id", async (req, res) => {
   });
   if (!existing) return res.status(404).json({ ok: false, message: "Monitoring device not found" });
 
-  await prisma.deviceAlert.deleteMany({ where: { deviceId: existing.id, tenantId: req.context.tenantId } });
-  await prisma.deviceSnapshot.deleteMany({ where: { deviceId: existing.id, tenantId: req.context.tenantId } });
-  await prisma.monitoredDevice.delete({ where: { id: existing.id } });
+  await prisma.$transaction([
+    prisma.deviceAlert.deleteMany({ where: { deviceId: existing.id, tenantId: req.context.tenantId } }),
+    prisma.deviceSnapshot.deleteMany({ where: { deviceId: existing.id, tenantId: req.context.tenantId } }),
+    prisma.monitoredDevice.delete({ where: { id: existing.id } }),
+  ]);
+
   res.json({ ok: true, message: "Monitoring device deleted" });
 });
 

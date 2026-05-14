@@ -633,6 +633,16 @@ button:hover,
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+.danger-btn {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.16);
+  background: rgba(255, 244, 242, 0.96);
+}
+
+.danger-btn:hover {
+  box-shadow: 0 14px 28px rgba(180, 35, 24, 0.12);
+}
+
 .backup-upload-btn {
   position: relative;
   overflow: hidden;
@@ -770,6 +780,123 @@ button:hover,
 .mapping-detail-main {
   display: grid;
   gap: 22px;
+}
+
+.monitoring-command-grid,
+.monitoring-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.monitoring-form-panel,
+.monitoring-side-panel {
+  min-height: 100%;
+}
+
+.monitoring-form-grid {
+  gap: 14px 16px;
+}
+
+.monitoring-inline-note {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(11, 87, 208, 0.08), rgba(15, 23, 42, 0.04));
+  border: 1px solid rgba(11, 87, 208, 0.1);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.monitoring-summary-grid {
+  margin-bottom: 0;
+}
+
+.monitoring-summary-card {
+  background:
+    radial-gradient(circle at top right, rgba(11, 87, 208, 0.14), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 252, 0.96));
+}
+
+.monitoring-guide-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.monitoring-guide-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(249, 250, 252, 0.96), rgba(243, 246, 250, 0.92));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.monitoring-guide-kicker,
+.monitoring-mini-card span,
+.monitoring-table-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monitoring-guide-card strong,
+.monitoring-mini-card strong {
+  display: block;
+  margin: 8px 0 6px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 1.05rem;
+}
+
+.monitoring-guide-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.monitoring-mini-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.monitoring-mini-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #fff;
+}
+
+.monitoring-mini-card span {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.monitoring-table-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.monitoring-table-summary span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(247, 249, 252, 0.92);
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.monitoring-device-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.monitoring-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .mapping-map-wrap,
@@ -1453,6 +1580,9 @@ input[type="search"] {
   .customer-kpis,
   .operator-payment-preview-grid,
   .operator-hero-metrics,
+  .monitoring-command-grid,
+  .monitoring-bottom-grid,
+  .monitoring-mini-strip,
   .mapping-layout,
   .mapping-detail-layout {
     grid-template-columns: 1fr;
@@ -1479,7 +1609,9 @@ input[type="search"] {
   .section-head,
   .customer-identity,
   .customer-history-card,
-  .operator-payment-preview-head {
+  .operator-payment-preview-head,
+  .monitoring-table-summary,
+  .monitoring-action-group {
     flex-direction: column;
   }
 
