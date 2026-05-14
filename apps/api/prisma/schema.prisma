@@ -34,6 +34,8 @@ model Tenant {
   monitoredDevices   MonitoredDevice[]
   deviceSnapshots    DeviceSnapshot[]
   deviceAlerts       DeviceAlert[]
+  edgeAgents         EdgeAgent[]
+  edgeTasks          EdgeTask[]
   acsTasks           AcsTask[]
   acsEvents          AcsEvent[]
   networkNodes       NetworkNode[]
@@ -428,4 +430,43 @@ model DeviceAlert {
 
   @@index([tenantId, status, severity])
   @@index([tenantId, deviceId, alertType])
+}
+
+model EdgeAgent {
+  id             String   @id
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  token          String   @unique
+  vpnMode        String   @default("existing_vpn")
+  status         String   @default("offline")
+  lastSeenAt     DateTime?
+  lastIpAddress  String?
+  lastMessage    String?
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tasks          EdgeTask[]
+
+  @@index([tenantId, status])
+}
+
+model EdgeTask {
+  id            String   @id
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  agentId       String
+  agent         EdgeAgent @relation(fields: [agentId], references: [id])
+  taskType      String
+  targetHost    String?
+  targetPort    Int?
+  payloadJson   String?
+  status        String   @default("queued")
+  resultJson    String?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+
+  @@index([tenantId, agentId, status])
 }

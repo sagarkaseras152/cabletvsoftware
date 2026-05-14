@@ -15,6 +15,8 @@ const modelOrder = [
   ["payments", prisma.payment],
   ["paymentRequests", prisma.paymentRequest],
   ["recharges", prisma.recharge],
+  ["edgeAgents", prisma.edgeAgent],
+  ["edgeTasks", prisma.edgeTask],
   ["staffMembers", prisma.staffMember],
   ["expenses", prisma.expense],
   ["tenantSettings", prisma.tenantSetting],

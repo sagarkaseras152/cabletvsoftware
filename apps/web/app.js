@@ -22,6 +22,7 @@ const operatorMenu = [
   { key: "mapping", title: "Mapping", description: "Fiber routes and field survey" },
   { key: "network", title: "Network", description: "OLT, ONT and ACS tasks" },
   { key: "monitoring", title: "Monitoring", description: "Live device health and risk engine" },
+  { key: "edge", title: "Edge Agent", description: "VPN-side local network access" },
   { key: "settings", title: "Settings", description: "Brand and billing rules" },
 ];
 
@@ -68,6 +69,9 @@ const state = {
     monitoredDevices: [],
     deviceAlerts: [],
     monitoringSummary: null,
+    edgeAgents: [],
+    edgeTasks: [],
+    edgeSummary: null,
     networkNodes: [],
     fiberRoutes: [],
     mapInsights: null,
@@ -2018,6 +2022,52 @@ function renderOperatorView() {
         ${tableWrapper(renderMonitoringPortTable(data.monitoredDevices))}
       </section>
     `,
+    edge: `
+      ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Edge Control</p><h2>VPN-Side Local Network Access</h2><p class="subtle-note">Ye same software ka connected edge agent hoga. Agent operator ke local VPN network me chalega aur local IP devices ko ping/poll karke cloud panel me result bhejega.</p></div></div>
+        ${renderEdgeAgentSummary(data.edgeSummary || {})}
+      </section>
+      <section class="split-grid dashboard-split">
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Register Agent</p><h2>Create Edge Agent</h2></div></div>
+          <form id="edgeAgentForm" class="form-grid two-col-grid">
+            <label>Agent Name<input name="name" required /></label>
+            <label>VPN Mode
+              <select name="vpnMode">
+                <option value="existing_vpn">Existing VPN on host</option>
+                <option value="l2tp_client">L2TP Client Host</option>
+                <option value="wireguard_client">WireGuard Client Host</option>
+              </select>
+            </label>
+            <label>Note<input name="note" placeholder="Office mini PC / NOC server / site agent" /></label>
+            <div class="form-actions"><button class="primary-btn" type="submit">Create Agent</button></div>
+          </form>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><p class="eyebrow">Ping Tool</p><h2>Queue Local IP Ping</h2></div></div>
+          <form id="edgePingForm" class="form-grid two-col-grid">
+            <label>Agent
+              <select name="agentId">
+                ${(data.edgeAgents || []).map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.status)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Target Host<input name="targetHost" placeholder="192.168.1.1" required /></label>
+            <label>Ping Count<input name="count" type="number" value="2" /></label>
+            <label>Timeout (ms)<input name="timeoutMs" type="number" value="5000" /></label>
+            <div class="form-actions"><button class="primary-btn" type="submit">Queue Ping</button></div>
+          </form>
+        </article>
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Agents</p><h2>Connected Edge Agents</h2></div></div>
+        ${tableWrapper(renderEdgeAgentsTable(data.edgeAgents))}
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Task History</p><h2>Ping / Relay Results</h2></div></div>
+        ${tableWrapper(renderEdgeTasksTable(data.edgeTasks))}
+      </section>
+    `,
     settings: `
         ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
         <section class="panel">
@@ -2654,6 +2704,61 @@ function renderMonitoringPortTable(items = []) {
   `;
 }
 
+function renderEdgeAgentSummary(summary = {}) {
+  return `
+    <div class="menu-grid operator-mini-grid">
+      <article class="menu-card operator-mini-card"><h3>Total Agents</h3><p>${summary.totalAgents || 0}</p><span>Registered VPN-side collectors</span></article>
+      <article class="menu-card operator-mini-card"><h3>Online Agents</h3><p>${summary.onlineAgents || 0}</p><span>Heartbeat receive ho raha hai</span></article>
+      <article class="menu-card operator-mini-card"><h3>Queued Tasks</h3><p>${summary.queuedTasks || 0}</p><span>Pending ping/poll tasks</span></article>
+    </div>
+  `;
+}
+
+function renderEdgeAgentsTable(items = []) {
+  if (!items.length) return `<div class="empty-state">Abhi koi edge agent register nahi hai.</div>`;
+  return `
+    <table>
+      <thead><tr><th>Agent</th><th>Status</th><th>VPN</th><th>Last Seen</th><th>Token</th><th>Action</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${escapeHtml(item.name)}<br /><span class="subtle-note">${escapeHtml(item.lastIpAddress || "-")}</span></td>
+            <td><span class="badge ${badgeClass(item.status === "online" ? "online" : "offline")}">${escapeHtml(item.status)}</span></td>
+            <td>${escapeHtml(item.vpnMode || "-")}</td>
+            <td>${escapeHtml(formatDate(item.lastSeenAt))}<br /><span class="subtle-note">${escapeHtml(item.lastMessage || "-")}</span></td>
+            <td><code>${escapeHtml(item.token)}</code></td>
+            <td>
+              <button class="ghost-btn action-btn" data-action="copy-edge-agent" data-id="${item.id}">Copy Setup</button>
+              <button class="ghost-btn action-btn" data-action="regen-edge-token" data-id="${item.id}">New Token</button>
+              <button class="ghost-btn action-btn" data-action="delete-edge-agent" data-id="${item.id}">Delete</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderEdgeTasksTable(items = []) {
+  if (!items.length) return `<div class="empty-state">Abhi koi edge task history nahi hai.</div>`;
+  return `
+    <table>
+      <thead><tr><th>Type</th><th>Target</th><th>Status</th><th>Result</th><th>Time</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${escapeHtml(item.taskType)}</td>
+            <td>${escapeHtml(item.targetHost || "-")}${item.targetPort ? `:${escapeHtml(String(item.targetPort))}` : ""}</td>
+            <td><span class="badge ${badgeClass(item.status === "completed" ? "success" : item.status === "failed" ? "failed" : "queued")}">${escapeHtml(item.status)}</span></td>
+            <td>${escapeHtml(item.errorMessage || item.resultJson || "-")}</td>
+            <td>${escapeHtml(formatDate(item.completedAt || item.updatedAt || item.createdAt))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 function renderOperatorsAdminList(items) {
   if (!items.length) {
     return `<div class="empty-state">No business accounts created yet.</div>`;
@@ -2894,6 +2999,39 @@ async function handleOperatorAction(action, id) {
     await loadOperatorData();
     renderOperatorView();
     showStatus(`Port ${command} action complete ho gayi.`);
+    return;
+  }
+
+  if (action === "copy-edge-agent") {
+    const item = state.data.edgeAgents.find((agent) => agent.id === id);
+    if (!item) return;
+    const setupText = [
+      `CABLEOPS_CLOUD_API_BASE=${apiBase}`,
+      `CABLEOPS_AGENT_TOKEN=${item.token}`,
+      `CABLEOPS_AGENT_NAME=${item.name}`,
+      "",
+      "Run:",
+      "npm --workspace apps/agent run start",
+    ].join("\n");
+    await copyText(setupText);
+    showStatus("Edge agent setup copied.");
+    return;
+  }
+
+  if (action === "regen-edge-token") {
+    await fetchJson(`/edge/agents/${id}/regenerate-token`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Edge agent token regenerate ho gaya.");
+    return;
+  }
+
+  if (action === "delete-edge-agent") {
+    if (!window.confirm("Delete this edge agent?")) return;
+    await fetchJson(`/edge/agents/${id}`, { method: "DELETE" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("Edge agent deleted.");
     return;
   }
 
@@ -3226,6 +3364,36 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const edgeAgentForm = document.getElementById("edgeAgentForm");
+  if (edgeAgentForm) {
+    edgeAgentForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+      await fetchJson("/edge/agents", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Edge agent create ho gaya.");
+    });
+  }
+
+  const edgePingForm = document.getElementById("edgePingForm");
+  if (edgePingForm) {
+    edgePingForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+      await fetchJson(`/edge/agents/${payload.agentId}/ping`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus("Ping task queue ho gayi. Agent run hote hi result aayega.");
+    });
+  }
+
   const settingsForm = document.getElementById("settingsForm");
   if (settingsForm) {
     settingsForm.addEventListener("submit", async (event) => {
@@ -3441,7 +3609,7 @@ async function loadPlatformOwnerData() {
 }
 
 async function loadOperatorData() {
-  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings, mappingOverview, monitoringOverview] =
+  const [operators, customers, packages, payments, paymentRequests, recharges, reports, staff, expenses, olts, onts, acsTasks, acsEvents, settings, mappingOverview, monitoringOverview, edgeOverview] =
     await Promise.all([
       fetchJson("/operators"),
       fetchJson("/customers"),
@@ -3459,6 +3627,7 @@ async function loadOperatorData() {
       fetchJson("/settings"),
       fetchJson("/mapping/overview"),
       fetchJson("/monitoring/overview"),
+      fetchJson("/edge/overview"),
     ]);
 
   state.data.operators = operators.items;
@@ -3481,6 +3650,9 @@ async function loadOperatorData() {
   state.data.monitoredDevices = monitoringOverview.items?.devices || [];
   state.data.deviceAlerts = monitoringOverview.items?.alerts || [];
   state.data.monitoringSummary = monitoringOverview.items?.summary || null;
+  state.data.edgeAgents = edgeOverview.items?.agents || [];
+  state.data.edgeTasks = edgeOverview.items?.tasks || [];
+  state.data.edgeSummary = edgeOverview.items?.summary || null;
   updateWorkspaceBrand();
 }
 

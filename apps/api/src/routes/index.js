@@ -4,6 +4,7 @@ import authRouter from "./auth.js";
 import backupRouter from "./backup.js";
 import blueprintRouter from "./blueprint.js";
 import customersRouter from "./customers.js";
+import edgeRouter from "./edge.js";
 import expensesRouter from "./expenses.js";
 import healthRouter from "./health.js";
 import mappingRouter from "./mapping.js";
@@ -30,6 +31,7 @@ router.use("/acs", acsRouter);
 router.use("/blueprint", blueprintRouter);
 router.use("/operators", operatorsRouter);
 router.use("/customers", customersRouter);
+router.use("/edge", edgeRouter);
 router.use("/packages", packagesRouter);
 router.use("/payments", paymentsRouter);
 router.use("/public", publicRouter);
@@ -52,6 +54,7 @@ router.get("/", (_req, res) => {
       backup: "/api/backup/export",
       operators: "/api/operators",
       customers: "/api/customers",
+      edge: "/api/edge/overview",
       packages: "/api/packages",
       payments: "/api/payments",
       publicPayments: "/api/public/payment-lookup",
