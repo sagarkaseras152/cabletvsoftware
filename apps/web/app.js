@@ -1962,7 +1962,14 @@ function renderOperatorView() {
             <label>Mode
               <select name="monitorMode">
                 <option value="active_poll">Active Poll from server</option>
+                <option value="edge_agent_snmp">Edge Agent SNMP</option>
                 <option value="push">Device/Agent Push Telemetry</option>
+              </select>
+            </label>
+            <label>Edge Agent
+              <select name="edgeAgentId">
+                <option value="">No edge agent</option>
+                ${(data.edgeAgents || []).map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.status)}</option>`).join("")}
               </select>
             </label>
             <label>Expected Heartbeat (sec)<input name="expectedIntervalSec" type="number" value="300" /></label>

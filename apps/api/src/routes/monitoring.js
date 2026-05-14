@@ -133,6 +133,7 @@ router.post("/devices", async (req, res) => {
       model: payload.model || null,
       host: payload.host || null,
       port: safeInt(payload.port),
+      edgeAgentId: payload.edgeAgentId || null,
       protocol: payload.protocol || "snmp",
       snmpVersion: payload.snmpVersion || "2c",
       snmpCommunity: payload.snmpCommunity || null,
@@ -172,6 +173,7 @@ router.patch("/devices/:id", async (req, res) => {
       model: payload.model ?? existing.model,
       host: payload.host ?? existing.host,
       port: payload.port !== undefined ? safeInt(payload.port) : existing.port,
+      edgeAgentId: payload.edgeAgentId !== undefined ? payload.edgeAgentId || null : existing.edgeAgentId,
       protocol: payload.protocol ?? existing.protocol,
       snmpVersion: payload.snmpVersion ?? existing.snmpVersion,
       snmpCommunity: payload.snmpCommunity !== undefined ? payload.snmpCommunity || null : existing.snmpCommunity,
@@ -213,6 +215,34 @@ router.post("/devices/:id/poll", async (req, res) => {
     where: { id: req.params.id, tenantId: req.context.tenantId },
   });
   if (!existing) return res.status(404).json({ ok: false, message: "Monitoring device not found" });
+
+  if (existing.monitorMode === "edge_agent_snmp") {
+    if (!existing.edgeAgentId) {
+      return res.status(400).json({ ok: false, message: "Edge agent not linked for this device" });
+    }
+    const task = await prisma.edgeTask.create({
+      data: {
+        id: makeId("atask"),
+        tenantId: req.context.tenantId,
+        agentId: existing.edgeAgentId,
+        taskType: "snmp_poll",
+        targetHost: existing.host || null,
+        targetPort: existing.port || 161,
+        payloadJson: JSON.stringify({
+          deviceId: existing.id,
+          host: existing.host,
+          port: existing.port || 161,
+          snmpCommunity: existing.snmpCommunity,
+          snmpVersion: existing.snmpVersion || "2c",
+          metricProfile: existing.metricProfile || "generic_system",
+          customOidMapJson: existing.customOidMapJson || null,
+          pollTimeoutMs: existing.pollTimeoutMs || 5000,
+        }),
+      },
+    });
+
+    return res.json({ ok: true, queued: true, item: task, message: "Edge SNMP poll queued" });
+  }
 
   const response = await pollMonitoredDevice(existing);
   res.json({ ok: true, ...response, message: "Manual poll complete" });

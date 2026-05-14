@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { recordMonitoringTelemetry } from "../services/monitoringEngine.js";
 
 const router = Router();
 
@@ -90,6 +91,55 @@ router.post("/agent/tasks/:id/result", async (req, res) => {
       completedAt: new Date(),
     },
   });
+
+  if (task.taskType === "snmp_poll" && payload.status === "completed") {
+    const taskPayload = task.payloadJson ? JSON.parse(task.payloadJson) : {};
+    const deviceId = taskPayload.deviceId;
+    if (deviceId) {
+      const device = await prisma.monitoredDevice.findFirst({
+        where: {
+          id: deviceId,
+          tenantId: task.tenantId,
+        },
+      });
+      if (device) {
+        await recordMonitoringTelemetry(device, {
+          eventType: "edge_snmp_poll",
+          status: "online",
+          ...(payload.resultJson || {}),
+          message: payload.errorMessage || payload.resultJson?.message || "Edge SNMP poll complete",
+          lastPollAt: new Date(),
+          lastPollStatusCode: 200,
+          pollFailures: 0,
+        });
+      }
+    }
+  }
+
+  if (task.taskType === "snmp_poll" && payload.status === "failed") {
+    const taskPayload = task.payloadJson ? JSON.parse(task.payloadJson) : {};
+    const deviceId = taskPayload.deviceId;
+    if (deviceId) {
+      const device = await prisma.monitoredDevice.findFirst({
+        where: {
+          id: deviceId,
+          tenantId: task.tenantId,
+        },
+      });
+      if (device) {
+        await recordMonitoringTelemetry(device, {
+          eventType: "edge_snmp_poll",
+          status: "offline",
+          message: payload.errorMessage || "Edge SNMP poll failed",
+          latencyMs: taskPayload.pollTimeoutMs || 5000,
+          packetLossPercent: 100,
+          lastPollAt: new Date(),
+          lastPollStatusCode: 503,
+          pollFailures: Number(device.pollFailures || 0) + 1,
+        });
+      }
+    }
+  }
 
   await prisma.edgeAgent.update({
     where: { id: task.agentId },

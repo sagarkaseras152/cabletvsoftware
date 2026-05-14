@@ -7,5 +7,7 @@
     "dev": "node src/agent.js",
     "start": "node src/agent.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "net-snmp": "^3.26.3"
+  }
 }

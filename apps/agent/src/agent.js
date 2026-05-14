@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import snmp from "net-snmp";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -72,9 +73,99 @@ async function runPingTask(task) {
   }
 }
 
+const builtinOidProfiles = {
+  generic_system: {
+    uptimeSeconds: "1.3.6.1.2.1.1.3.0",
+  },
+};
+
+function normalizeSnmpValue(field, varbind) {
+  if (!varbind || snmp.isVarbindError(varbind)) return null;
+  const raw = varbind.value;
+  if (field === "uptimeSeconds") {
+    return Math.round(Number(raw) / 100);
+  }
+  if (Buffer.isBuffer(raw)) return raw.toString("utf8");
+  if (typeof raw === "object" && typeof raw.toString === "function") return raw.toString();
+  return raw;
+}
+
+async function runSnmpPollTask(task) {
+  const payload = task.payloadJson ? JSON.parse(task.payloadJson) : {};
+  if (!payload.host) {
+    return {
+      status: "failed",
+      errorMessage: "host missing for snmp poll",
+    };
+  }
+  if (!payload.snmpCommunity) {
+    return {
+      status: "failed",
+      errorMessage: "SNMP community missing",
+    };
+  }
+
+  let oidMap = payload.metricProfile && builtinOidProfiles[payload.metricProfile]
+    ? { ...builtinOidProfiles[payload.metricProfile] }
+    : {};
+
+  if (payload.customOidMapJson) {
+    try {
+      const custom = JSON.parse(payload.customOidMapJson);
+      if (custom && typeof custom === "object") {
+        oidMap = { ...oidMap, ...custom };
+      }
+    } catch {
+    }
+  }
+
+  const fields = Object.keys(oidMap);
+  if (!fields.length) {
+    return {
+      status: "failed",
+      errorMessage: "SNMP OID map missing",
+    };
+  }
+
+  const session = snmp.createSession(payload.host, payload.snmpCommunity, {
+    port: Number(payload.port || 161),
+    retries: 1,
+    timeout: Number(payload.pollTimeoutMs || 5000),
+    version: snmp.Version2c,
+  });
+
+  return new Promise((resolve) => {
+    session.get(fields.map((field) => oidMap[field]), (error, varbinds) => {
+      if (error) {
+        session.close();
+        resolve({
+          status: "failed",
+          errorMessage: `SNMP error: ${error.message}`,
+        });
+        return;
+      }
+
+      const resultJson = {
+        message: `Edge SNMP success: ${fields.length} OIDs collected`,
+      };
+      fields.forEach((field, index) => {
+        resultJson[field] = normalizeSnmpValue(field, varbinds[index]);
+      });
+      session.close();
+      resolve({
+        status: "completed",
+        resultJson,
+      });
+    });
+  });
+}
+
 async function handleTask(task) {
   if (task.taskType === "ping") {
     return runPingTask(task);
+  }
+  if (task.taskType === "snmp_poll") {
+    return runSnmpPollTask(task);
   }
   return {
     status: "failed",
