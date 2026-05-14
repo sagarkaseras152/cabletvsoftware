@@ -365,6 +365,7 @@ model MonitoredDevice {
   onuOfflineCount      Int?
   activeAlarmCount     Int?
   interfaceDownCount   Int?
+  lastInterfacesJson   String?
   lastEventType        String?
   lastEventMessage     String?
   riskScore            Int      @default(0)

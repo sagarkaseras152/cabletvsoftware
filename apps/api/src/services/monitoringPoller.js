@@ -296,6 +296,16 @@ async function probeMikrotikRest(device) {
       .map((item) => [String(item.name || "").toLowerCase(), item.value]),
   );
   const downInterfaces = interfaces.filter((item) => !item.running && !item.disabled).length;
+  const compactInterfaces = interfaces.slice(0, 64).map((item) => ({
+    id: item[".id"] || item.id || item.name,
+    name: item.name,
+    type: item.type,
+    running: item.running === true || item.running === "true",
+    disabled: item.disabled === true || item.disabled === "true",
+    mtu: item["actual-mtu"] || item.mtu || null,
+    macAddress: item["mac-address"] || null,
+    comment: item.comment || null,
+  }));
 
   const totalMemory = toNumberOrNull(resource["total-memory"]);
   const freeMemory = toNumberOrNull(resource["free-memory"]);
@@ -316,6 +326,7 @@ async function probeMikrotikRest(device) {
       voltage: toNumberOrNull(health.voltage ?? health["input-voltage"]),
       interfaceDownCount: downInterfaces,
       activeAlarmCount: 0,
+      interfacesJson: JSON.stringify(compactInterfaces),
     },
   };
 }

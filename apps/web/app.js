@@ -2013,6 +2013,10 @@ function renderOperatorView() {
         <div class="section-head"><div><p class="eyebrow">Alert Feed</p><h2>Active Monitoring Alerts</h2></div></div>
         ${tableWrapper(renderMonitoringAlertsTable(data.deviceAlerts))}
       </section>
+      <section class="panel">
+        <div class="section-head"><div><p class="eyebrow">Ports & Interfaces</p><h2>Live Port Status</h2><p class="subtle-note">MikroTik REST ya future vendor adapters se live interface state aur actions yahin dikhengi.</p></div></div>
+        ${tableWrapper(renderMonitoringPortTable(data.monitoredDevices))}
+      </section>
     `,
     settings: `
         ${renderOperatorWorkspaceHero(data, metrics, data.settings)}
@@ -2576,6 +2580,47 @@ function renderMonitoringDeviceTable(items = []) {
   `;
 }
 
+function renderMonitoringPortTable(items = []) {
+  const rows = [];
+  items.forEach((device) => {
+    let ports = [];
+    try {
+      ports = JSON.parse(device.lastInterfacesJson || "[]");
+    } catch {
+      ports = [];
+    }
+    ports.forEach((port) => {
+      rows.push({ device, port });
+    });
+  });
+
+  if (!rows.length) {
+    return `<div class="empty-state">Abhi kisi device se live port/interface list receive nahi hui.</div>`;
+  }
+
+  return `
+    <table>
+      <thead><tr><th>Device</th><th>Port</th><th>Type</th><th>Running</th><th>Disabled</th><th>MTU</th><th>Action</th></tr></thead>
+      <tbody>
+        ${rows.map(({ device, port }) => `
+          <tr>
+            <td>${escapeHtml(device.name)}</td>
+            <td>${escapeHtml(port.name || port.id || "-")}</td>
+            <td>${escapeHtml(port.type || "-")}</td>
+            <td><span class="badge ${badgeClass(port.running ? "online" : "offline")}">${port.running ? "running" : "down"}</span></td>
+            <td><span class="badge ${badgeClass(port.disabled ? "suspended" : "active")}">${port.disabled ? "disabled" : "enabled"}</span></td>
+            <td>${escapeHtml(String(port.mtu || "-"))}</td>
+            <td>
+              <button class="ghost-btn action-btn" data-action="enable-port" data-id="${device.id}::${encodeURIComponent(port.id || port.name || "")}">Enable</button>
+              <button class="ghost-btn action-btn" data-action="disable-port" data-id="${device.id}::${encodeURIComponent(port.id || port.name || "")}">Disable</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 function renderOperatorsAdminList(items) {
   if (!items.length) {
     return `<div class="empty-state">No business accounts created yet.</div>`;
@@ -2805,6 +2850,17 @@ async function handleOperatorAction(action, id) {
     await loadOperatorData();
     renderOperatorView();
     showStatus("Monitoring device deleted.");
+    return;
+  }
+
+  if (action === "enable-port" || action === "disable-port") {
+    const [deviceId, encodedPortId] = String(id || "").split("::");
+    if (!deviceId || !encodedPortId) return;
+    const command = action === "enable-port" ? "enable" : "disable";
+    await fetchJson(`/monitoring/devices/${deviceId}/ports/${decodeURIComponent(encodedPortId)}/${command}`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus(`Port ${command} action complete ho gayi.`);
     return;
   }
 

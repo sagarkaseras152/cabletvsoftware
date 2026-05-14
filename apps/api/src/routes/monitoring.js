@@ -12,6 +12,36 @@ import { pollMonitoredDevice } from "../services/monitoringPoller.js";
 
 const router = Router();
 
+async function mikrotikRestPatch(device, path, body) {
+  const protocol = String(device.protocol || "").toLowerCase();
+  const isHttp = protocol === "mikrotik_rest_http";
+  const basePath = (device.pollPath || "/rest").replace(/\/+$/, "");
+  const port = Number(device.port || (isHttp ? 80 : 443));
+  const authHeader = `Basic ${Buffer.from(`${device.authUsername}:${device.authPassword}`).toString("base64")}`;
+  const response = await fetch(`${isHttp ? "http" : "https"}://${device.host}:${port}${basePath}${path}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload,
+  };
+}
+
 router.post("/ingest/:ingestKey", async (req, res) => {
   const device = await prisma.monitoredDevice.findUnique({
     where: { ingestKey: req.params.ingestKey },
@@ -186,6 +216,45 @@ router.post("/devices/:id/poll", async (req, res) => {
 
   const response = await pollMonitoredDevice(existing);
   res.json({ ok: true, ...response, message: "Manual poll complete" });
+});
+
+router.post("/devices/:id/ports/:portId/:command", async (req, res) => {
+  const existing = await prisma.monitoredDevice.findFirst({
+    where: { id: req.params.id, tenantId: req.context.tenantId },
+  });
+  if (!existing) return res.status(404).json({ ok: false, message: "Monitoring device not found" });
+
+  const protocol = String(existing.protocol || "").toLowerCase();
+  if (protocol !== "mikrotik_rest" && protocol !== "mikrotik_rest_http") {
+    return res.status(400).json({ ok: false, message: "Port actions currently supported only for MikroTik REST devices" });
+  }
+  if (!existing.authUsername || !existing.authPassword) {
+    return res.status(400).json({ ok: false, message: "Device auth missing for port action" });
+  }
+
+  const disabled = req.params.command === "disable";
+  if (!["enable", "disable"].includes(req.params.command)) {
+    return res.status(400).json({ ok: false, message: "Unsupported port command" });
+  }
+
+  const action = await mikrotikRestPatch(existing, `/interface/${encodeURIComponent(req.params.portId)}`, {
+    disabled: disabled ? "true" : "false",
+  });
+
+  if (!action.ok) {
+    return res.status(action.status || 500).json({
+      ok: false,
+      message: action.payload?.message || action.payload?.detail || "Port action failed",
+      detail: action.payload,
+    });
+  }
+
+  const refreshed = await pollMonitoredDevice(existing);
+  res.json({
+    ok: true,
+    message: `Port ${req.params.command} successful`,
+    ...refreshed,
+  });
 });
 
 router.delete("/devices/:id", async (req, res) => {
