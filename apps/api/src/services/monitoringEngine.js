@@ -45,6 +45,9 @@ export function buildAnalysis(device, snapshots = []) {
   const currentPacketLoss = safeNumber(device.packetLossPercent ?? latest.packetLossPercent);
   const currentRx = safeNumber(device.opticalRxPowerDbm ?? latest.opticalRxPowerDbm ?? device.signalPowerDbm ?? latest.signalPowerDbm);
   const currentTx = safeNumber(device.opticalTxPowerDbm ?? latest.opticalTxPowerDbm);
+  const currentOnuOffline = safeInt(device.onuOfflineCount ?? latest.onuOfflineCount);
+  const currentAlarms = safeInt(device.activeAlarmCount ?? latest.activeAlarmCount);
+  const currentDownInterfaces = safeInt(device.interfaceDownCount ?? latest.interfaceDownCount);
   const recentAvgLatency = average(recent.map((item) => safeNumber(item.latencyMs)));
   const olderAvgLatency = average(older.map((item) => safeNumber(item.latencyMs)));
   const recentAvgTemp = average(recent.map((item) => safeNumber(item.temperatureC)));
@@ -119,6 +122,40 @@ export function buildAnalysis(device, snapshots = []) {
     });
   }
 
+  if (currentOnuOffline !== null && currentOnuOffline > 0) {
+    riskScore += Math.min(20, currentOnuOffline * 2);
+    riskReasons.push(`${currentOnuOffline} ONU/ONT offline detect hui.`);
+    activeAlerts.push({
+      severity: currentOnuOffline >= 5 ? "critical" : "warning",
+      alertType: "onu_offline",
+      title: "ONU offline count rising",
+      detail: `${currentOnuOffline} ONU/ONT currently offline report hui.`,
+    });
+    predictedIssues.push("Splitter, feeder fiber ya local power issue impact create kar sakta hai.");
+  }
+
+  if (currentAlarms !== null && currentAlarms > 0) {
+    riskScore += Math.min(18, currentAlarms * 3);
+    riskReasons.push(`${currentAlarms} active alarms device par present hain.`);
+    activeAlerts.push({
+      severity: currentAlarms >= 3 ? "critical" : "warning",
+      alertType: "active_alarms",
+      title: "Device alarms active",
+      detail: `${currentAlarms} active alarms currently visible hain.`,
+    });
+  }
+
+  if (currentDownInterfaces !== null && currentDownInterfaces > 0) {
+    riskScore += Math.min(16, currentDownInterfaces * 2);
+    riskReasons.push(`${currentDownInterfaces} interfaces down report hui.`);
+    activeAlerts.push({
+      severity: currentDownInterfaces >= 4 ? "critical" : "warning",
+      alertType: "interfaces_down",
+      title: "Interface down events",
+      detail: `${currentDownInterfaces} interfaces down state me hain.`,
+    });
+  }
+
   if (device.deviceType === "ont" || device.deviceType === "olt") {
     if (currentRx !== null && currentRx <= -27) {
       riskScore += 24;
@@ -184,6 +221,9 @@ export function buildAnalysis(device, snapshots = []) {
       opticalTxPowerDbm: currentTx,
       latencyMs: currentLatency,
       packetLossPercent: currentPacketLoss,
+      onuOfflineCount: currentOnuOffline,
+      activeAlarmCount: currentAlarms,
+      interfaceDownCount: currentDownInterfaces,
       lastSeenGapSec,
     },
   };
@@ -254,6 +294,10 @@ export async function recordMonitoringTelemetry(device, payload) {
       packetLossPercent: safeNumber(payload.packetLossPercent),
       voltage: safeNumber(payload.voltage),
       uptimeSeconds: safeInt(payload.uptimeSeconds),
+      onuOnlineCount: safeInt(payload.onuOnlineCount),
+      onuOfflineCount: safeInt(payload.onuOfflineCount),
+      activeAlarmCount: safeInt(payload.activeAlarmCount),
+      interfaceDownCount: safeInt(payload.interfaceDownCount),
       message: payload.message ? String(payload.message).slice(0, 500) : null,
       rawPayload: JSON.stringify(payload).slice(0, 4000),
     },
@@ -293,6 +337,10 @@ export async function recordMonitoringTelemetry(device, payload) {
       packetLossPercent: safeNumber(payload.packetLossPercent),
       voltage: safeNumber(payload.voltage),
       uptimeSeconds: safeInt(payload.uptimeSeconds),
+      onuOnlineCount: safeInt(payload.onuOnlineCount),
+      onuOfflineCount: safeInt(payload.onuOfflineCount),
+      activeAlarmCount: safeInt(payload.activeAlarmCount),
+      interfaceDownCount: safeInt(payload.interfaceDownCount),
       lastEventType: payload.eventType || "telemetry",
       lastEventMessage: payload.message ? String(payload.message).slice(0, 500) : null,
       riskScore: analysis.riskScore,

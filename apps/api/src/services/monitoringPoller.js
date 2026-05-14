@@ -1,11 +1,99 @@
 import http from "http";
 import https from "https";
 import net from "net";
+import snmp from "net-snmp";
 import { prisma } from "../db.js";
 import { recordMonitoringTelemetry } from "./monitoringEngine.js";
 
 let monitoringPollerTimer = null;
 let monitoringPollerBusy = false;
+
+const builtinOidProfiles = {
+  generic_system: {
+    uptimeSeconds: "1.3.6.1.2.1.1.3.0",
+  },
+};
+
+function parseOidMap(device) {
+  const base = device.metricProfile && builtinOidProfiles[device.metricProfile]
+    ? { ...builtinOidProfiles[device.metricProfile] }
+    : {};
+
+  if (!device.customOidMapJson) return base;
+  try {
+    const custom = JSON.parse(device.customOidMapJson);
+    return custom && typeof custom === "object" ? { ...base, ...custom } : base;
+  } catch {
+    return base;
+  }
+}
+
+function normalizeSnmpValue(field, varbind) {
+  if (!varbind) return null;
+  if (snmp.isVarbindError(varbind)) return null;
+  const raw = varbind.value;
+  if (raw === undefined || raw === null) return null;
+
+  if (field === "uptimeSeconds") {
+    return Math.round(Number(raw) / 100);
+  }
+
+  if (Buffer.isBuffer(raw)) return raw.toString("utf8");
+  if (typeof raw === "object" && typeof raw.toString === "function") return raw.toString();
+  return raw;
+}
+
+function probeSnmp(device) {
+  return new Promise((resolve) => {
+    const oidMap = parseOidMap(device);
+    const fields = Object.keys(oidMap);
+    if (!device.snmpCommunity || !fields.length) {
+      resolve({
+        ok: false,
+        latencyMs: null,
+        statusCode: 400,
+        message: !device.snmpCommunity
+          ? "SNMP community missing"
+          : "SNMP OID map missing. Add custom OIDs or metric profile.",
+      });
+      return;
+    }
+
+    const startedAt = Date.now();
+    const session = snmp.createSession(device.host, device.snmpCommunity, {
+      port: Number(device.port || 161),
+      retries: 1,
+      timeout: Number(device.pollTimeoutMs || 5000),
+      version: snmp.Version2c,
+    });
+
+    session.get(fields.map((field) => oidMap[field]), (error, varbinds) => {
+      if (error) {
+        session.close();
+        resolve({
+          ok: false,
+          latencyMs: Date.now() - startedAt,
+          statusCode: 503,
+          message: error.message,
+        });
+        return;
+      }
+
+      const metrics = {};
+      fields.forEach((field, index) => {
+        metrics[field] = normalizeSnmpValue(field, varbinds[index]);
+      });
+      session.close();
+      resolve({
+        ok: true,
+        latencyMs: Date.now() - startedAt,
+        statusCode: 200,
+        message: `SNMP ${fields.length} metrics collected`,
+        metrics,
+      });
+    });
+  });
+}
 
 function probeTcp(device) {
   return new Promise((resolve) => {
@@ -101,6 +189,7 @@ async function probeDevice(device) {
   }
 
   const protocol = String(device.protocol || "tcp").toLowerCase();
+  if (protocol === "snmp") return probeSnmp(device);
   if (protocol === "http") return probeHttpLike(device, http);
   if (protocol === "https") return probeHttpLike(device, https);
   return probeTcp(device);
@@ -115,6 +204,7 @@ async function pollSingleDevice(device) {
     latencyMs: probe.latencyMs,
     packetLossPercent: probe.ok ? 0 : 100,
     message: probe.message,
+    ...(probe.metrics || {}),
     lastPollAt: new Date(),
     lastPollStatusCode: probe.statusCode,
     pollFailures: nextPollFailures,

@@ -16,6 +16,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
+    "net-snmp": "^3.26.3",
     "prisma": "^6.19.3"
   }
 }

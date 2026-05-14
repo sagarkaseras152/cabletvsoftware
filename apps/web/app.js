@@ -1934,10 +1934,23 @@ function renderOperatorView() {
             <label>Port<input name="port" type="number" value="161" /></label>
             <label>Protocol
               <select name="protocol">
+                <option value="snmp">SNMP v2c</option>
                 <option value="tcp">TCP Port Check</option>
                 <option value="http">HTTP</option>
                 <option value="https">HTTPS</option>
                 <option value="custom">Custom / Future</option>
+              </select>
+            </label>
+            <label>SNMP Version
+              <select name="snmpVersion">
+                <option value="2c">v2c</option>
+              </select>
+            </label>
+            <label>SNMP Community<input name="snmpCommunity" placeholder="public / readonly community" /></label>
+            <label>Metric Profile
+              <select name="metricProfile">
+                <option value="">Custom OID Map</option>
+                <option value="generic_system">Generic System</option>
               </select>
             </label>
             <label>Mode
@@ -1957,6 +1970,7 @@ function renderOperatorView() {
                 <option value="false">No</option>
               </select>
             </label>
+            <label>Custom OID Map JSON<textarea name="customOidMapJson" rows="6" placeholder='{"cpuPercent":"1.3.6.x.x","memoryPercent":"1.3.6.x.x","temperatureC":"1.3.6.x.x","opticalRxPowerDbm":"1.3.6.x.x","opticalTxPowerDbm":"1.3.6.x.x","onuOnlineCount":"1.3.6.x.x","onuOfflineCount":"1.3.6.x.x","activeAlarmCount":"1.3.6.x.x","interfaceDownCount":"1.3.6.x.x","uptimeSeconds":"1.3.6.x.x"}'></textarea></label>
             <label>Linked OLT
               <select name="linkedOltId">
                 <option value="">No OLT link</option>
@@ -1983,8 +1997,8 @@ function renderOperatorView() {
           <div class="section-head"><div><p class="eyebrow">Connection Model</p><h2>Always-On Analysis Flow</h2></div></div>
           <div class="stack-list">
             <article class="stack-card"><div><strong>1. Device create karo</strong><p>Software unique ingest key generate karega jo us device ke liye secure rahegi.</p></div></article>
-            <article class="stack-card"><div><strong>2. Agent / script / bridge connect karo</strong><p>Har 1-5 minute par telemetry push karo: CPU, memory, temperature, latency, packet loss, optical power.</p></div></article>
-            <article class="stack-card"><div><strong>3. Risk engine kaam karega</strong><p>Weak optical power, overheating, rising latency aur reporting silence se alerts aur future issue prediction niklegi.</p></div></article>
+            <article class="stack-card"><div><strong>2. SNMP ya push connect karo</strong><p>Static IP reachable ho to SNMP community + vendor OIDs do. Warna device/agent push telemetry use karo.</p></div></article>
+            <article class="stack-card"><div><strong>3. Risk engine kaam karega</strong><p>Weak optical power, ONU offline count, alarms, overheating, rising latency aur reporting silence se alerts aur future issue prediction niklegi.</p></div></article>
           </div>
         </article>
       </section>
@@ -2536,7 +2550,9 @@ function renderMonitoringDeviceTable(items = []) {
                 CPU ${metrics.cpuPercent ?? item.cpuPercent ?? "-"}%<br />
                 Mem ${metrics.memoryPercent ?? item.memoryPercent ?? "-"}%<br />
                 Lat ${metrics.latencyMs ?? item.latencyMs ?? "-"} ms<br />
-                RX ${metrics.opticalRxPowerDbm ?? item.opticalRxPowerDbm ?? item.signalPowerDbm ?? "-"} dBm
+                RX ${metrics.opticalRxPowerDbm ?? item.opticalRxPowerDbm ?? item.signalPowerDbm ?? "-"} dBm<br />
+                TX ${metrics.opticalTxPowerDbm ?? item.opticalTxPowerDbm ?? "-"} dBm<br />
+                ONU Off ${metrics.onuOfflineCount ?? item.onuOfflineCount ?? "-"} | Alarms ${metrics.activeAlarmCount ?? item.activeAlarmCount ?? "-"}
               </td>
               <td>${escapeHtml(predicted)}</td>
               <td>

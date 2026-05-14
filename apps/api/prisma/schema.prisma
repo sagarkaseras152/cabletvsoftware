@@ -334,6 +334,10 @@ model MonitoredDevice {
   host                 String?
   port                 Int?
   protocol             String   @default("snmp")
+  snmpVersion          String   @default("2c")
+  snmpCommunity        String?
+  metricProfile        String?
+  customOidMapJson     String?
   monitorMode          String   @default("push")
   ingestKey            String   @unique
   expectedIntervalSec  Int      @default(300)
@@ -357,6 +361,10 @@ model MonitoredDevice {
   packetLossPercent    Float?
   voltage              Float?
   uptimeSeconds        Int?
+  onuOnlineCount       Int?
+  onuOfflineCount      Int?
+  activeAlarmCount     Int?
+  interfaceDownCount   Int?
   lastEventType        String?
   lastEventMessage     String?
   riskScore            Int      @default(0)
@@ -389,6 +397,10 @@ model DeviceSnapshot {
   packetLossPercent  Float?
   voltage            Float?
   uptimeSeconds      Int?
+  onuOnlineCount     Int?
+  onuOfflineCount    Int?
+  activeAlarmCount   Int?
+  interfaceDownCount Int?
   message            String?
   rawPayload         String?
   createdAt          DateTime @default(now())
