@@ -179,7 +179,7 @@ function probeHttpLike(device, client) {
   });
 }
 
-function requestJson(client, options) {
+function requestJson(client, options, body = null) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const req = client.request(
@@ -221,6 +221,9 @@ function requestJson(client, options) {
         error,
       });
     });
+    if (body) {
+      req.write(JSON.stringify(body));
+    }
     req.end();
   });
 }
@@ -289,7 +292,34 @@ async function probeMikrotikRest(device) {
   }
 
   const resource = resourceRes.data || {};
-  const interfaces = Array.isArray(interfacesRes.data) ? interfacesRes.data : [];
+  let interfaces = Array.isArray(interfacesRes.data) ? interfacesRes.data : [];
+  let interfaceFetchMessage = interfacesRes.ok
+    ? `interface fetch ok (${interfaces.length} rows)`
+    : interfacesRes.error?.message || `interface GET failed with ${interfacesRes.statusCode}`;
+
+  if (!interfaces.length) {
+    const interfacePrintRes = await requestJson(
+      client,
+      {
+        ...common,
+        path: `${basePath}/interface/print`,
+        method: "POST",
+        headers: {
+          ...common.headers,
+          "Content-Type": "application/json",
+        },
+      },
+      { ".proplist": [".id", "name", "type", "running", "disabled", "mtu", "actual-mtu", "mac-address", "comment"] },
+    );
+
+    if (interfacePrintRes.ok && Array.isArray(interfacePrintRes.data)) {
+      interfaces = interfacePrintRes.data;
+      interfaceFetchMessage = `interface print ok (${interfaces.length} rows)`;
+    } else if (!interfacesRes.ok) {
+      interfaceFetchMessage = `${interfaceFetchMessage}; print fallback failed with ${interfacePrintRes.statusCode || 503}`;
+    }
+  }
+
   const healthList = Array.isArray(healthRes.data) ? healthRes.data : [];
   const health = Object.fromEntries(
     healthList
@@ -317,7 +347,7 @@ async function probeMikrotikRest(device) {
     ok: true,
     latencyMs: resourceRes.latencyMs,
     statusCode: resourceRes.statusCode,
-    message: `MikroTik REST success from ${basePath}`,
+    message: `MikroTik REST success from ${basePath}; ${interfaceFetchMessage}`,
     metrics: {
       cpuPercent: toNumberOrNull(resource["cpu-load"]),
       memoryPercent: usedMemoryPercent,
@@ -326,7 +356,10 @@ async function probeMikrotikRest(device) {
       voltage: toNumberOrNull(health.voltage ?? health["input-voltage"]),
       interfaceDownCount: downInterfaces,
       activeAlarmCount: 0,
-      interfacesJson: JSON.stringify(compactInterfaces),
+      interfacesJson: JSON.stringify({
+        items: compactInterfaces,
+        fetchMessage: interfaceFetchMessage,
+      }),
     },
   };
 }

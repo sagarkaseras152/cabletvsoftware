@@ -2582,20 +2582,53 @@ function renderMonitoringDeviceTable(items = []) {
 
 function renderMonitoringPortTable(items = []) {
   const rows = [];
+  const diagnostics = [];
   items.forEach((device) => {
     let ports = [];
+    let fetchMessage = "";
     try {
-      ports = JSON.parse(device.lastInterfacesJson || "[]");
+      const parsed = JSON.parse(device.lastInterfacesJson || "[]");
+      if (Array.isArray(parsed)) {
+        ports = parsed;
+      } else {
+        ports = Array.isArray(parsed.items) ? parsed.items : [];
+        fetchMessage = parsed.fetchMessage || "";
+      }
     } catch {
       ports = [];
     }
     ports.forEach((port) => {
       rows.push({ device, port });
     });
+    if (!ports.length && (device.protocol === "mikrotik_rest" || device.protocol === "mikrotik_rest_http")) {
+      diagnostics.push({
+        deviceName: device.name,
+        host: device.host,
+        message: fetchMessage || device.lastEventMessage || "Interface fetch detail abhi receive nahi hui.",
+      });
+    }
   });
 
   if (!rows.length) {
-    return `<div class="empty-state">Abhi kisi device se live port/interface list receive nahi hui.</div>`;
+    return `
+      <div class="empty-state">Abhi kisi device se live port/interface list receive nahi hui.</div>
+      ${diagnostics.length ? `
+        <div class="stack-list">
+          ${diagnostics.map((item) => `
+            <article class="stack-card">
+              <div>
+                <strong>${escapeHtml(item.deviceName)}</strong>
+                <p>${escapeHtml(item.host || "-")}</p>
+              </div>
+              <div>
+                <strong>Interface Fetch</strong>
+                <p>${escapeHtml(item.message)}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
+    `;
   }
 
   return `
