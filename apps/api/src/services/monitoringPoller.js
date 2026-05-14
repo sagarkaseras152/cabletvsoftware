@@ -25,6 +25,15 @@ const interfaceOidColumns = {
   alias: "1.3.6.1.2.1.31.1.1.1.18",
 };
 
+const indexedInterfaceColumns = {
+  name: "1.3.6.1.2.1.31.1.1.1.1",
+  descr: "1.3.6.1.2.1.2.2.1.2",
+  mtu: "1.3.6.1.2.1.2.2.1.4",
+  speed: "1.3.6.1.2.1.2.2.1.5",
+  adminStatus: "1.3.6.1.2.1.2.2.1.7",
+  operStatus: "1.3.6.1.2.1.2.2.1.8",
+};
+
 function resolveSnmpVersion(version) {
   return String(version || "2c").toLowerCase() === "1" ? snmp.Version1 : snmp.Version2c;
 }
@@ -96,6 +105,54 @@ function walkOidColumn(session, baseOid) {
   });
 }
 
+function getMany(session, oids) {
+  return new Promise((resolve, reject) => {
+    session.get(oids, (error, varbinds) => {
+      if (error) reject(error);
+      else resolve(varbinds || []);
+    });
+  });
+}
+
+async function collectIndexedInterfaceInventory(session, maxIndex = 24) {
+  const interfaces = [];
+  for (let index = 1; index <= maxIndex; index += 1) {
+    const oidEntries = Object.entries(indexedInterfaceColumns);
+    const oids = oidEntries.map(([, baseOid]) => `${baseOid}.${index}`);
+    let varbinds = [];
+    try {
+      varbinds = await getMany(session, oids);
+    } catch {
+      continue;
+    }
+
+    const values = {};
+    oidEntries.forEach(([key], oidIndex) => {
+      const varbind = varbinds[oidIndex];
+      if (!varbind || snmp.isVarbindError(varbind)) return;
+      values[key] = decodeSnmpRaw(varbind.value);
+    });
+
+    const name = String(values.name || values.descr || "").trim();
+    if (!name) continue;
+
+    interfaces.push({
+      id: String(index),
+      name,
+      descr: String(values.descr || ""),
+      alias: "",
+      type: classifyInterfaceName(String(values.name || ""), String(values.descr || "")),
+      rawType: null,
+      mtu: Number(values.mtu || 0) || null,
+      speed: Number(values.speed || 0) || null,
+      running: Number(values.operStatus || 0) === 1,
+      disabled: Number(values.adminStatus || 0) === 2,
+    });
+  }
+
+  return interfaces;
+}
+
 async function collectInterfaceInventory(session) {
   const columnMap = {};
   const errors = [];
@@ -113,7 +170,7 @@ async function collectInterfaceInventory(session) {
     for (const key of map.keys()) indexes.add(key);
   });
 
-  return Array.from(indexes)
+  const items = Array.from(indexes)
     .map((index) => {
       const name = String(columnMap.name.get(index) || columnMap.descr.get(index) || `if-${index}`);
       const descr = String(columnMap.descr.get(index) || "");
@@ -138,9 +195,21 @@ async function collectInterfaceInventory(session) {
     .filter((item) => item.name || item.descr)
     .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
 
+  if (items.length) {
+    return {
+      items,
+      fetchMessage: errors.length ? `Partial interface walk: ${errors.join(" | ")}` : "",
+      source: "walk",
+    };
+  }
+
+  const indexedItems = await collectIndexedInterfaceInventory(session, 24);
   return {
-    items,
-    fetchMessage: errors.length ? `Partial interface walk: ${errors.join(" | ")}` : "",
+    items: indexedItems,
+    fetchMessage: indexedItems.length
+      ? "Interface inventory direct indexed standard OID probes se build hui."
+      : (errors.length ? `Partial interface walk: ${errors.join(" | ")}` : "Interface inventory standard probes se bhi receive nahi hui."),
+    source: indexedItems.length ? "indexed_probe" : "walk_failed",
   };
 }
 
@@ -189,7 +258,7 @@ function probeSnmp(device) {
           const interfaces = inventory.items || [];
           metrics.interfaceDownCount = interfaces.filter((item) => !item.running && !item.disabled).length;
           metrics.interfacesJson = JSON.stringify({
-            source: "server_snmp_if_mib",
+            source: inventory.source ? `server_snmp_${inventory.source}` : "server_snmp_if_mib",
             itemCount: interfaces.length,
             fetchMessage: inventory.fetchMessage || "",
             items: interfaces,
