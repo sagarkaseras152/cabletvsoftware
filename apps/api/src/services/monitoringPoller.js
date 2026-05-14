@@ -14,6 +14,17 @@ const builtinOidProfiles = {
   },
 };
 
+const interfaceOidColumns = {
+  name: "1.3.6.1.2.1.31.1.1.1.1",
+  descr: "1.3.6.1.2.1.2.2.1.2",
+  type: "1.3.6.1.2.1.2.2.1.3",
+  mtu: "1.3.6.1.2.1.2.2.1.4",
+  speed: "1.3.6.1.2.1.2.2.1.5",
+  adminStatus: "1.3.6.1.2.1.2.2.1.7",
+  operStatus: "1.3.6.1.2.1.2.2.1.8",
+  alias: "1.3.6.1.2.1.31.1.1.1.18",
+};
+
 function resolveSnmpVersion(version) {
   return String(version || "2c").toLowerCase() === "1" ? snmp.Version1 : snmp.Version2c;
 }
@@ -46,6 +57,80 @@ function normalizeSnmpValue(field, varbind) {
   if (Buffer.isBuffer(raw)) return raw.toString("utf8");
   if (typeof raw === "object" && typeof raw.toString === "function") return raw.toString();
   return raw;
+}
+
+function decodeSnmpRaw(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (Buffer.isBuffer(raw)) return raw.toString("utf8");
+  if (typeof raw === "object" && typeof raw.toString === "function") return raw.toString();
+  return raw;
+}
+
+function classifyInterfaceName(name = "", descr = "") {
+  const source = `${name} ${descr}`.toLowerCase();
+  if (source.includes("pon")) return "pon";
+  if (source.includes("onu") || source.includes("ont")) return "onu";
+  if (source.includes("uplink") || source.includes("sfp") || source.includes("ge") || source.includes("gigabit")) return "uplink";
+  if (source.includes("ether")) return "ethernet";
+  return "interface";
+}
+
+function walkOidColumn(session, baseOid) {
+  return new Promise((resolve, reject) => {
+    const values = new Map();
+    session.subtree(
+      baseOid,
+      (varbinds) => {
+        for (const varbind of varbinds) {
+          if (!varbind || snmp.isVarbindError(varbind)) continue;
+          const oid = String(varbind.oid || "");
+          const index = oid.slice(baseOid.length + 1);
+          values.set(index, decodeSnmpRaw(varbind.value));
+        }
+      },
+      (error) => {
+        if (error) reject(error);
+        else resolve(values);
+      },
+    );
+  });
+}
+
+async function collectInterfaceInventory(session) {
+  const columns = await Promise.all(
+    Object.entries(interfaceOidColumns).map(async ([key, oid]) => [key, await walkOidColumn(session, oid)]),
+  );
+
+  const columnMap = Object.fromEntries(columns);
+  const indexes = new Set();
+  Object.values(columnMap).forEach((map) => {
+    for (const key of map.keys()) indexes.add(key);
+  });
+
+  return Array.from(indexes)
+    .map((index) => {
+      const name = String(columnMap.name.get(index) || columnMap.descr.get(index) || `if-${index}`);
+      const descr = String(columnMap.descr.get(index) || "");
+      const alias = String(columnMap.alias.get(index) || "");
+      const adminStatus = Number(columnMap.adminStatus.get(index) || 0);
+      const operStatus = Number(columnMap.operStatus.get(index) || 0);
+      const mtu = Number(columnMap.mtu.get(index) || 0) || null;
+      const speed = Number(columnMap.speed.get(index) || 0) || null;
+      return {
+        id: index,
+        name,
+        descr,
+        alias,
+        type: classifyInterfaceName(name, descr),
+        rawType: columnMap.type.get(index) ?? null,
+        mtu,
+        speed,
+        running: operStatus === 1,
+        disabled: adminStatus === 2,
+      };
+    })
+    .filter((item) => item.name || item.descr)
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
 }
 
 function probeSnmp(device) {
@@ -88,14 +173,33 @@ function probeSnmp(device) {
       fields.forEach((field, index) => {
         metrics[field] = normalizeSnmpValue(field, varbinds[index]);
       });
-      session.close();
-      resolve({
-        ok: true,
-        latencyMs: Date.now() - startedAt,
-        statusCode: 200,
-        message: `SNMP success: ${fields.length} OIDs collected`,
-        metrics,
-      });
+      collectInterfaceInventory(session)
+        .then((interfaces) => {
+          metrics.interfaceDownCount = interfaces.filter((item) => !item.running && !item.disabled).length;
+          metrics.interfacesJson = JSON.stringify({
+            source: "server_snmp_if_mib",
+            itemCount: interfaces.length,
+            items: interfaces,
+          });
+        })
+        .catch((inventoryError) => {
+          metrics.interfacesJson = JSON.stringify({
+            source: "server_snmp_if_mib",
+            itemCount: 0,
+            fetchMessage: `Interface walk failed: ${inventoryError.message}`,
+            items: [],
+          });
+        })
+        .finally(() => {
+          session.close();
+          resolve({
+            ok: true,
+            latencyMs: Date.now() - startedAt,
+            statusCode: 200,
+            message: `SNMP success: ${fields.length} OIDs collected`,
+            metrics,
+          });
+        });
     });
   });
 }

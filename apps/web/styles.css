@@ -893,10 +893,40 @@ button:hover,
   gap: 4px;
 }
 
+.monitoring-device-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.monitoring-device-link:hover,
+.active-monitor-link {
+  color: var(--primary-deep);
+}
+
 .monitoring-action-group {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.monitoring-detail-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.monitoring-detail-kpis {
+  margin-bottom: 0;
+}
+
+.monitoring-empty-detail {
+  min-height: 220px;
 }
 
 .mapping-map-wrap,

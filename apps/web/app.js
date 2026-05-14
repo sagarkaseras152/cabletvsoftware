@@ -29,6 +29,7 @@ const operatorMenu = [
 const state = {
   adminSelectedOperatorId: "",
   adminFormMode: "create",
+  selectedMonitoringDeviceId: "",
   operatorView: "dashboard",
   operatorCustomerSearch: "",
   mapDrawMode: false,
@@ -2054,6 +2055,9 @@ function renderOperatorView() {
         </div>
         ${tableWrapper(renderMonitoringDeviceTable(data.monitoredDevices))}
       </section>
+      <section class="panel">
+        ${renderMonitoringDeviceDetail((data.monitoredDevices || []).find((item) => item.id === state.selectedMonitoringDeviceId) || data.monitoredDevices?.[0] || null)}
+      </section>
       <section class="monitoring-bottom-grid">
         <article class="panel">
           <div class="section-head"><div><p class="eyebrow">Alert Feed</p><h2>Active Monitoring Alerts</h2></div></div>
@@ -2624,6 +2628,88 @@ function renderMonitoringAlertsTable(items = []) {
   `;
 }
 
+function parseMonitoringInterfaces(device) {
+  try {
+    const parsed = JSON.parse(device?.lastInterfacesJson || "[]");
+    if (Array.isArray(parsed)) {
+      return { items: parsed, fetchMessage: "" };
+    }
+    return {
+      items: Array.isArray(parsed?.items) ? parsed.items : [],
+      fetchMessage: parsed?.fetchMessage || "",
+      source: parsed?.source || "",
+      itemCount: parsed?.itemCount || 0,
+    };
+  } catch {
+    return { items: [], fetchMessage: "" };
+  }
+}
+
+function renderMonitoringDeviceDetail(device) {
+  if (!device) {
+    return `
+      <div class="admin-empty-state monitoring-empty-detail">
+        <p class="eyebrow">Device Detail</p>
+        <h3>Kisi device par click karo.</h3>
+        <p>Yahan interface inventory, uplink state, PON entries aur latest fetch detail dikhegi.</p>
+      </div>
+    `;
+  }
+
+  const detail = parseMonitoringInterfaces(device);
+  const ports = detail.items || [];
+  const counts = {
+    total: ports.length,
+    running: ports.filter((item) => item.running).length,
+    down: ports.filter((item) => !item.running && !item.disabled).length,
+    pon: ports.filter((item) => item.type === "pon").length,
+    onu: ports.filter((item) => item.type === "onu").length,
+    uplink: ports.filter((item) => item.type === "uplink").length,
+  };
+
+  return `
+    <div class="monitoring-detail-shell">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Device Detail</p>
+          <h2>${escapeHtml(device.name)}</h2>
+          <p class="subtle-note">${escapeHtml(device.host || "-")} | ${escapeHtml(device.protocol || "-")} | ${escapeHtml(device.monitorMode || "-")}</p>
+        </div>
+      </div>
+      <div class="menu-grid operator-mini-grid monitoring-detail-kpis">
+        <article class="menu-card operator-mini-card"><h3>Total Interfaces</h3><p>${counts.total}</p><span>${escapeHtml(detail.source || "standard interface inventory")}</span></article>
+        <article class="menu-card operator-mini-card"><h3>Running</h3><p>${counts.running}</p><span>Current up ports</span></article>
+        <article class="menu-card operator-mini-card"><h3>Down</h3><p>${counts.down}</p><span>Admin enabled but down</span></article>
+        <article class="menu-card operator-mini-card"><h3>PON</h3><p>${counts.pon}</p><span>PON-like interface names</span></article>
+        <article class="menu-card operator-mini-card"><h3>ONU/ONT</h3><p>${counts.onu}</p><span>ONU/ONT-like names</span></article>
+        <article class="menu-card operator-mini-card"><h3>Uplink</h3><p>${counts.uplink}</p><span>GE/SFP/uplink-like names</span></article>
+      </div>
+      ${detail.fetchMessage ? `<div class="feedback error">${escapeHtml(detail.fetchMessage)}</div>` : ""}
+      ${ports.length ? `
+        ${tableWrapper(`
+          <table>
+            <thead><tr><th>Name</th><th>Category</th><th>Description</th><th>Alias</th><th>Speed</th><th>MTU</th><th>Running</th><th>Admin</th></tr></thead>
+            <tbody>
+              ${ports.map((port) => `
+                <tr>
+                  <td>${escapeHtml(port.name || port.id || "-")}</td>
+                  <td>${escapeHtml(port.type || "-")}</td>
+                  <td>${escapeHtml(port.descr || "-")}</td>
+                  <td>${escapeHtml(port.alias || "-")}</td>
+                  <td>${port.speed ? escapeHtml(String(port.speed)) : "-"}</td>
+                  <td>${port.mtu ? escapeHtml(String(port.mtu)) : "-"}</td>
+                  <td><span class="badge ${badgeClass(port.running ? "online" : "offline")}">${port.running ? "running" : "down"}</span></td>
+                  <td><span class="badge ${badgeClass(port.disabled ? "suspended" : "active")}">${port.disabled ? "disabled" : "enabled"}</span></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `)}
+      ` : `<div class="empty-state">Is device se abhi interface inventory receive nahi hui. SNMP poll chalne par yahin uplink, PON aur standard interface list dikhne lagegi.</div>`}
+    </div>
+  `;
+}
+
 function renderMonitoringDeviceTable(items = []) {
   if (!items.length) {
     return `<div class="empty-state">Abhi koi monitored device add nahi hua.</div>`;
@@ -2641,7 +2727,7 @@ function renderMonitoringDeviceTable(items = []) {
             <tr>
               <td>
                 <div class="monitoring-device-cell">
-                  <strong>${escapeHtml(item.name)}</strong>
+                  <button type="button" class="monitoring-device-link action-btn ${state.selectedMonitoringDeviceId === item.id ? "active-monitor-link" : ""}" data-action="select-monitor-device" data-id="${item.id}">${escapeHtml(item.name)}</button>
                   <span class="subtle-note">${escapeHtml(item.host || "No host")} | ${escapeHtml(item.protocol || "-")}</span>
                   <span class="subtle-note">${escapeHtml(item.monitorMode || "push")} | ${escapeHtml(item.vendor || "Unknown vendor")}${item.model ? ` | ${escapeHtml(item.model)}` : ""}</span>
                 </div>
@@ -3033,9 +3119,17 @@ async function handleOperatorAction(action, id) {
 
   if (action === "test-snmp-device") {
     await fetchJson(`/monitoring/devices/${id}/poll`, { method: "POST" });
+    state.selectedMonitoringDeviceId = id;
     await loadOperatorData();
     renderOperatorView();
     showStatus("SNMP test complete ho gaya. Latest row message check karo.");
+    return;
+  }
+
+  if (action === "select-monitor-device") {
+    state.selectedMonitoringDeviceId = id;
+    renderOperatorView();
+    showStatus("Device detail panel update ho gaya.", "success");
     return;
   }
 
@@ -3045,6 +3139,9 @@ async function handleOperatorAction(action, id) {
       const response = await fetchJson(`/monitoring/devices/${id}`, { method: "DELETE" });
       state.data.monitoredDevices = (state.data.monitoredDevices || []).filter((item) => item.id !== id);
       state.data.deviceAlerts = (state.data.deviceAlerts || []).filter((item) => item.deviceId !== id);
+      if (state.selectedMonitoringDeviceId === id) {
+        state.selectedMonitoringDeviceId = state.data.monitoredDevices[0]?.id || "";
+      }
       await loadOperatorData();
       renderOperatorView();
       showStatus(response.message || "Monitoring device deleted.");
@@ -3718,6 +3815,9 @@ async function loadOperatorData() {
   state.data.edgeAgents = edgeOverview.items?.agents || [];
   state.data.edgeTasks = edgeOverview.items?.tasks || [];
   state.data.edgeSummary = edgeOverview.items?.summary || null;
+  if (!state.selectedMonitoringDeviceId || !state.data.monitoredDevices.some((item) => item.id === state.selectedMonitoringDeviceId)) {
+    state.selectedMonitoringDeviceId = state.data.monitoredDevices[0]?.id || "";
+  }
   updateWorkspaceBrand();
 }
 

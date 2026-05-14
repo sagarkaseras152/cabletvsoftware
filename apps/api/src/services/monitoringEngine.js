@@ -298,7 +298,7 @@ export async function recordMonitoringTelemetry(device, payload) {
       onuOfflineCount: safeInt(payload.onuOfflineCount),
       activeAlarmCount: safeInt(payload.activeAlarmCount),
       interfaceDownCount: safeInt(payload.interfaceDownCount),
-      rawPayload: JSON.stringify(payload).slice(0, 4000),
+      rawPayload: JSON.stringify(payload).slice(0, 20000),
       message: payload.message ? String(payload.message).slice(0, 500) : null,
     },
   });
@@ -341,7 +341,7 @@ export async function recordMonitoringTelemetry(device, payload) {
       onuOfflineCount: safeInt(payload.onuOfflineCount),
       activeAlarmCount: safeInt(payload.activeAlarmCount),
       interfaceDownCount: safeInt(payload.interfaceDownCount),
-      lastInterfacesJson: payload.interfacesJson ? String(payload.interfacesJson).slice(0, 4000) : undefined,
+      lastInterfacesJson: payload.interfacesJson ? String(payload.interfacesJson).slice(0, 20000) : undefined,
       lastEventType: payload.eventType || "telemetry",
       lastEventMessage: payload.message ? String(payload.message).slice(0, 500) : null,
       riskScore: analysis.riskScore,
