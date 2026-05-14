@@ -12,6 +12,96 @@ function makeId(prefix) {
 function makeToken() {
   return randomBytes(24).toString("hex");
 }
+router.post("/agent/register", async (req, res) => {
+  const payload = req.body || {};
+  const agent = await prisma.edgeAgent.findUnique({
+    where: { token: String(payload.token || "") },
+  });
+  if (!agent) return res.status(404).json({ ok: false, message: "Invalid agent token" });
+
+  const item = await prisma.edgeAgent.update({
+    where: { id: agent.id },
+    data: {
+      status: "online",
+      lastSeenAt: new Date(),
+      lastIpAddress: req.ip || null,
+      lastMessage: payload.message || "registered",
+    },
+  });
+
+  res.json({
+    ok: true,
+    item: {
+      id: item.id,
+      name: item.name,
+      tenantId: item.tenantId,
+      pollIntervalMs: 10000,
+    },
+  });
+});
+
+router.post("/agent/pull", async (req, res) => {
+  const payload = req.body || {};
+  const agent = await prisma.edgeAgent.findUnique({
+    where: { token: String(payload.token || "") },
+  });
+  if (!agent) return res.status(404).json({ ok: false, message: "Invalid agent token" });
+
+  await prisma.edgeAgent.update({
+    where: { id: agent.id },
+    data: {
+      status: "online",
+      lastSeenAt: new Date(),
+      lastIpAddress: req.ip || null,
+      lastMessage: payload.message || "heartbeat",
+    },
+  });
+
+  const tasks = await prisma.edgeTask.findMany({
+    where: {
+      tenantId: agent.tenantId,
+      agentId: agent.id,
+      status: "queued",
+    },
+    orderBy: { createdAt: "asc" },
+    take: 10,
+  });
+
+  res.json({ ok: true, items: tasks });
+});
+
+router.post("/agent/tasks/:id/result", async (req, res) => {
+  const payload = req.body || {};
+  const task = await prisma.edgeTask.findFirst({
+    where: { id: req.params.id },
+    include: { agent: true },
+  });
+  if (!task) return res.status(404).json({ ok: false, message: "Task not found" });
+  if (task.agent.token !== String(payload.token || "")) {
+    return res.status(403).json({ ok: false, message: "Invalid agent token for task" });
+  }
+
+  const item = await prisma.edgeTask.update({
+    where: { id: task.id },
+    data: {
+      status: payload.status || "completed",
+      resultJson: payload.resultJson ? JSON.stringify(payload.resultJson).slice(0, 4000) : null,
+      errorMessage: payload.errorMessage ? String(payload.errorMessage).slice(0, 500) : null,
+      completedAt: new Date(),
+    },
+  });
+
+  await prisma.edgeAgent.update({
+    where: { id: task.agentId },
+    data: {
+      status: "online",
+      lastSeenAt: new Date(),
+      lastMessage: payload.errorMessage || "task result received",
+    },
+  });
+
+  res.json({ ok: true, item });
+});
 
 router.use(requireAuth);
 
@@ -111,97 +201,6 @@ router.delete("/agents/:id", async (req, res) => {
   await prisma.edgeTask.deleteMany({ where: { tenantId: req.context.tenantId, agentId: agent.id } });
   await prisma.edgeAgent.delete({ where: { id: agent.id } });
   res.json({ ok: true, message: "Agent deleted" });
-});
-
-router.post("/agent/register", async (req, res) => {
-  const payload = req.body || {};
-  const agent = await prisma.edgeAgent.findUnique({
-    where: { token: String(payload.token || "") },
-  });
-  if (!agent) return res.status(404).json({ ok: false, message: "Invalid agent token" });
-
-  const item = await prisma.edgeAgent.update({
-    where: { id: agent.id },
-    data: {
-      status: "online",
-      lastSeenAt: new Date(),
-      lastIpAddress: req.ip || null,
-      lastMessage: payload.message || "registered",
-    },
-  });
-
-  res.json({
-    ok: true,
-    item: {
-      id: item.id,
-      name: item.name,
-      tenantId: item.tenantId,
-      pollIntervalMs: 10000,
-    },
-  });
-});
-
-router.post("/agent/pull", async (req, res) => {
-  const payload = req.body || {};
-  const agent = await prisma.edgeAgent.findUnique({
-    where: { token: String(payload.token || "") },
-  });
-  if (!agent) return res.status(404).json({ ok: false, message: "Invalid agent token" });
-
-  await prisma.edgeAgent.update({
-    where: { id: agent.id },
-    data: {
-      status: "online",
-      lastSeenAt: new Date(),
-      lastIpAddress: req.ip || null,
-      lastMessage: payload.message || "heartbeat",
-    },
-  });
-
-  const tasks = await prisma.edgeTask.findMany({
-    where: {
-      tenantId: agent.tenantId,
-      agentId: agent.id,
-      status: "queued",
-    },
-    orderBy: { createdAt: "asc" },
-    take: 10,
-  });
-
-  res.json({ ok: true, items: tasks });
-});
-
-router.post("/agent/tasks/:id/result", async (req, res) => {
-  const payload = req.body || {};
-  const task = await prisma.edgeTask.findFirst({
-    where: { id: req.params.id },
-    include: { agent: true },
-  });
-  if (!task) return res.status(404).json({ ok: false, message: "Task not found" });
-  if (task.agent.token !== String(payload.token || "")) {
-    return res.status(403).json({ ok: false, message: "Invalid agent token for task" });
-  }
-
-  const item = await prisma.edgeTask.update({
-    where: { id: task.id },
-    data: {
-      status: payload.status || "completed",
-      resultJson: payload.resultJson ? JSON.stringify(payload.resultJson).slice(0, 4000) : null,
-      errorMessage: payload.errorMessage ? String(payload.errorMessage).slice(0, 500) : null,
-      completedAt: new Date(),
-    },
-  });
-
-  await prisma.edgeAgent.update({
-    where: { id: task.agentId },
-    data: {
-      status: "online",
-      lastSeenAt: new Date(),
-      lastMessage: payload.errorMessage || "task result received",
-    },
-  });
-
-  res.json({ ok: true, item });
 });
 
 export default router;
