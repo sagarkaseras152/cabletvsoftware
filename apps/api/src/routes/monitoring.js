@@ -12,6 +12,29 @@ import { pollMonitoredDevice } from "../services/monitoringPoller.js";
 
 const router = Router();
 
+async function queueEdgeSnmpPoll(tenantId, existing) {
+  return prisma.edgeTask.create({
+    data: {
+      id: makeId("atask"),
+      tenantId,
+      agentId: existing.edgeAgentId,
+      taskType: "snmp_poll",
+      targetHost: existing.host || null,
+      targetPort: existing.port || 161,
+      payloadJson: JSON.stringify({
+        deviceId: existing.id,
+        host: existing.host,
+        port: existing.port || 161,
+        snmpCommunity: existing.snmpCommunity,
+        snmpVersion: existing.snmpVersion || "2c",
+        metricProfile: existing.metricProfile || "generic_system",
+        customOidMapJson: existing.customOidMapJson || null,
+        pollTimeoutMs: existing.pollTimeoutMs || 5000,
+      }),
+    },
+  });
+}
+
 async function mikrotikRestPatch(device, path, body) {
   const protocol = String(device.protocol || "").toLowerCase();
   const isHttp = protocol === "mikrotik_rest_http";
@@ -154,7 +177,16 @@ router.post("/devices", async (req, res) => {
     },
   });
 
-  res.status(201).json({ ok: true, item });
+  let autoMessage = "Monitoring device created";
+  if (item.protocol === "snmp" && item.monitorMode === "edge_agent_snmp" && item.edgeAgentId) {
+    await queueEdgeSnmpPoll(req.context.tenantId, item);
+    autoMessage = "Monitoring device created. Auto SNMP discovery queued.";
+  } else if (item.pollEnabled && item.monitorMode === "active_poll") {
+    await pollMonitoredDevice(item);
+    autoMessage = "Monitoring device created. Initial poll started.";
+  }
+
+  res.status(201).json({ ok: true, item, message: autoMessage });
 });
 
 router.patch("/devices/:id", async (req, res) => {
@@ -220,26 +252,7 @@ router.post("/devices/:id/poll", async (req, res) => {
     if (!existing.edgeAgentId) {
       return res.status(400).json({ ok: false, message: "Edge agent not linked for this device" });
     }
-    const task = await prisma.edgeTask.create({
-      data: {
-        id: makeId("atask"),
-        tenantId: req.context.tenantId,
-        agentId: existing.edgeAgentId,
-        taskType: "snmp_poll",
-        targetHost: existing.host || null,
-        targetPort: existing.port || 161,
-        payloadJson: JSON.stringify({
-          deviceId: existing.id,
-          host: existing.host,
-          port: existing.port || 161,
-          snmpCommunity: existing.snmpCommunity,
-          snmpVersion: existing.snmpVersion || "2c",
-          metricProfile: existing.metricProfile || "generic_system",
-          customOidMapJson: existing.customOidMapJson || null,
-          pollTimeoutMs: existing.pollTimeoutMs || 5000,
-        }),
-      },
-    });
+    const task = await queueEdgeSnmpPoll(req.context.tenantId, existing);
 
     return res.json({ ok: true, queued: true, item: task, message: "Edge SNMP poll queued" });
   }

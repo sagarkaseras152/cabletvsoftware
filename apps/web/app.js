@@ -2645,6 +2645,18 @@ function parseMonitoringInterfaces(device) {
   }
 }
 
+function renderMonitoringVisibilityNote(device, detail, ports) {
+  const message = detail.fetchMessage || "";
+  if (ports.length) return "";
+  if ((device.lastPollStatusCode || 0) === 200) {
+    return `<div class="feedback success">Device connected hai. Basic SNMP data mil rahi hai, lekin extended interface inventory current SNMP view me expose nahi hui.</div>`;
+  }
+  if (message) {
+    return `<div class="feedback warning">${escapeHtml(message.replace(/^Interface walk failed:\s*/i, "Extended interface inventory abhi available nahi hui: "))}</div>`;
+  }
+  return `<div class="empty-state">Is device se abhi interface inventory receive nahi hui. System background me basic SNMP visibility maintain kar raha hai.</div>`;
+}
+
 function renderMonitoringDeviceDetail(device) {
   if (!device) {
     return `
@@ -2684,7 +2696,7 @@ function renderMonitoringDeviceDetail(device) {
         <article class="menu-card operator-mini-card"><h3>ONU/ONT</h3><p>${counts.onu}</p><span>ONU/ONT-like names</span></article>
         <article class="menu-card operator-mini-card"><h3>Uplink</h3><p>${counts.uplink}</p><span>GE/SFP/uplink-like names</span></article>
       </div>
-      ${detail.fetchMessage ? `<div class="feedback error">${escapeHtml(detail.fetchMessage)}</div>` : ""}
+      ${renderMonitoringVisibilityNote(device, detail, ports)}
       ${ports.length ? `
         ${tableWrapper(`
           <table>
@@ -2705,7 +2717,7 @@ function renderMonitoringDeviceDetail(device) {
             </tbody>
           </table>
         `)}
-      ` : `<div class="empty-state">Is device se abhi interface inventory receive nahi hui. SNMP poll chalne par yahin uplink, PON aur standard interface list dikhne lagegi.</div>`}
+      ` : ``}
     </div>
   `;
 }
@@ -3536,7 +3548,7 @@ function attachOperatorSectionEvents() {
       form.reset();
       await loadOperatorData();
       renderOperatorView();
-      showStatus("Monitoring device add ho gaya. Ab ingest endpoint copy karke telemetry push kar sakte ho.");
+      showStatus("Monitoring device add ho gaya. Initial discovery backend se automatically start ho gayi.");
     });
   }
 
