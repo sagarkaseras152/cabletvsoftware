@@ -14,6 +14,10 @@ const builtinOidProfiles = {
   },
 };
 
+function resolveSnmpVersion(version) {
+  return String(version || "2c").toLowerCase() === "1" ? snmp.Version1 : snmp.Version2c;
+}
+
 function parseOidMap(device) {
   const profileKey = device.metricProfile || "generic_system";
   const base = builtinOidProfiles[profileKey]
@@ -65,7 +69,7 @@ function probeSnmp(device) {
       port: Number(device.port || 161),
       retries: 1,
       timeout: Number(device.pollTimeoutMs || 5000),
-      version: snmp.Version2c,
+      version: resolveSnmpVersion(device.snmpVersion),
     });
 
     session.get(fields.map((field) => oidMap[field]), (error, varbinds) => {

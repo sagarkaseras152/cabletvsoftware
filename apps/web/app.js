@@ -1949,6 +1949,7 @@ function renderOperatorView() {
             </label>
             <label>SNMP Version
               <select name="snmpVersion">
+                <option value="1">v1</option>
                 <option value="2c">v2c</option>
               </select>
             </label>
@@ -2665,6 +2666,7 @@ function renderMonitoringDeviceTable(items = []) {
                 <div class="monitoring-action-group">
                   <button class="ghost-btn action-btn" data-action="copy-monitor-endpoint" data-id="${item.id}">Copy Ingest</button>
                   <button class="ghost-btn action-btn" data-action="poll-monitor-device" data-id="${item.id}">Poll Now</button>
+                  ${item.protocol === "snmp" ? `<button class="ghost-btn action-btn" data-action="test-snmp-device" data-id="${item.id}">SNMP Test</button>` : ""}
                   <button class="ghost-btn action-btn" data-action="regen-monitor-key" data-id="${item.id}">New Key</button>
                   <button class="ghost-btn danger-btn action-btn" data-action="delete-monitor-device" data-id="${item.id}">Delete</button>
                 </div>
@@ -3026,6 +3028,14 @@ async function handleOperatorAction(action, id) {
     await loadOperatorData();
     renderOperatorView();
     showStatus("Manual poll complete ho gaya.");
+    return;
+  }
+
+  if (action === "test-snmp-device") {
+    await fetchJson(`/monitoring/devices/${id}/poll`, { method: "POST" });
+    await loadOperatorData();
+    renderOperatorView();
+    showStatus("SNMP test complete ho gaya. Latest row message check karo.");
     return;
   }
 

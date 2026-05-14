@@ -79,6 +79,10 @@ const builtinOidProfiles = {
   },
 };
 
+function resolveSnmpVersion(version) {
+  return String(version || "2c").toLowerCase() === "1" ? snmp.Version1 : snmp.Version2c;
+}
+
 function normalizeSnmpValue(field, varbind) {
   if (!varbind || snmp.isVarbindError(varbind)) return null;
   const raw = varbind.value;
@@ -131,7 +135,7 @@ async function runSnmpPollTask(task) {
     port: Number(payload.port || 161),
     retries: 1,
     timeout: Number(payload.pollTimeoutMs || 5000),
-    version: snmp.Version2c,
+    version: resolveSnmpVersion(payload.snmpVersion),
   });
 
   return new Promise((resolve) => {
