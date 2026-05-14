@@ -179,6 +179,147 @@ function probeHttpLike(device, client) {
   });
 }
 
+function requestJson(client, options) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const req = client.request(
+      {
+        ...options,
+        rejectUnauthorized: false,
+      },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk.toString("utf8");
+        });
+        response.on("end", () => {
+          let parsed = null;
+          try {
+            parsed = body ? JSON.parse(body) : null;
+          } catch {
+            parsed = null;
+          }
+          resolve({
+            ok: (response.statusCode || 500) < 400,
+            statusCode: response.statusCode || 500,
+            latencyMs: Date.now() - startedAt,
+            data: parsed,
+            rawBody: body,
+          });
+        });
+      },
+    );
+
+    req.on("timeout", () => {
+      req.destroy(new Error(`HTTP timeout after ${options.timeout}ms`));
+    });
+    req.on("error", (error) => {
+      resolve({
+        ok: false,
+        statusCode: 503,
+        latencyMs: Date.now() - startedAt,
+        error,
+      });
+    });
+    req.end();
+  });
+}
+
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const cleaned = String(value).replace(/[^\d.-]/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseMikrotikUptimeSeconds(value) {
+  if (!value) return null;
+  if (/^\d+$/.test(String(value))) return Number(value);
+  const text = String(value).trim();
+  const match = text.match(/(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/i);
+  if (!match) return null;
+  const weeks = Number(match[1] || 0);
+  const days = Number(match[2] || 0);
+  const hours = Number(match[3] || 0);
+  const mins = Number(match[4] || 0);
+  const secs = Number(match[5] || 0);
+  return ((((weeks * 7) + days) * 24 + hours) * 60 + mins) * 60 + secs;
+}
+
+async function probeMikrotikRest(device) {
+  if (!device.authUsername || !device.authPassword) {
+    return {
+      ok: false,
+      latencyMs: null,
+      statusCode: 401,
+      message: "MikroTik username/password missing",
+    };
+  }
+
+  const client = String(device.protocol).toLowerCase() === "mikrotik_rest_http" ? http : https;
+  const port = Number(device.port || (client === https ? 443 : 80));
+  const timeout = Number(device.pollTimeoutMs || 5000);
+  const authHeader = `Basic ${Buffer.from(`${device.authUsername}:${device.authPassword}`).toString("base64")}`;
+  const basePath = (device.pollPath || "/rest").replace(/\/+$/, "");
+  const common = {
+    hostname: device.host,
+    port,
+    method: "GET",
+    timeout,
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+  };
+
+  const [resourceRes, interfacesRes, healthRes] = await Promise.all([
+    requestJson(client, { ...common, path: `${basePath}/system/resource` }),
+    requestJson(client, { ...common, path: `${basePath}/interface` }),
+    requestJson(client, { ...common, path: `${basePath}/system/health` }),
+  ]);
+
+  if (!resourceRes.ok) {
+    return {
+      ok: false,
+      latencyMs: resourceRes.latencyMs,
+      statusCode: resourceRes.statusCode,
+      message: resourceRes.error?.message
+        || `MikroTik REST failed with ${resourceRes.statusCode}. Check www-ssl/rest service, credentials, ACL, or path ${basePath}`,
+    };
+  }
+
+  const resource = resourceRes.data || {};
+  const interfaces = Array.isArray(interfacesRes.data) ? interfacesRes.data : [];
+  const healthList = Array.isArray(healthRes.data) ? healthRes.data : [];
+  const health = Object.fromEntries(
+    healthList
+      .map((item) => [String(item.name || "").toLowerCase(), item.value]),
+  );
+  const downInterfaces = interfaces.filter((item) => !item.running && !item.disabled).length;
+
+  const totalMemory = toNumberOrNull(resource["total-memory"]);
+  const freeMemory = toNumberOrNull(resource["free-memory"]);
+  const usedMemoryPercent = totalMemory && freeMemory !== null
+    ? Math.max(0, Math.min(100, Math.round(((totalMemory - freeMemory) / totalMemory) * 100)))
+    : null;
+
+  return {
+    ok: true,
+    latencyMs: resourceRes.latencyMs,
+    statusCode: resourceRes.statusCode,
+    message: `MikroTik REST success from ${basePath}`,
+    metrics: {
+      cpuPercent: toNumberOrNull(resource["cpu-load"]),
+      memoryPercent: usedMemoryPercent,
+      uptimeSeconds: parseMikrotikUptimeSeconds(resource.uptime),
+      temperatureC: toNumberOrNull(health.temperature ?? health["board-temperature"] ?? health["cpu-temperature"]),
+      voltage: toNumberOrNull(health.voltage ?? health["input-voltage"]),
+      interfaceDownCount: downInterfaces,
+      activeAlarmCount: 0,
+    },
+  };
+}
+
 async function probeDevice(device) {
   if (!device.host) {
     return {
@@ -190,6 +331,7 @@ async function probeDevice(device) {
   }
 
   const protocol = String(device.protocol || "tcp").toLowerCase();
+  if (protocol === "mikrotik_rest" || protocol === "mikrotik_rest_http") return probeMikrotikRest(device);
   if (protocol === "snmp") return probeSnmp(device);
   if (protocol === "http") return probeHttpLike(device, http);
   if (protocol === "https") return probeHttpLike(device, https);

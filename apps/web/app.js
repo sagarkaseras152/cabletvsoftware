@@ -1934,6 +1934,8 @@ function renderOperatorView() {
             <label>Port<input name="port" type="number" value="161" /></label>
             <label>Protocol
               <select name="protocol">
+                <option value="mikrotik_rest">MikroTik REST (HTTPS)</option>
+                <option value="mikrotik_rest_http">MikroTik REST (HTTP)</option>
                 <option value="snmp">SNMP v2c</option>
                 <option value="tcp">TCP Port Check</option>
                 <option value="http">HTTP</option>
@@ -1964,6 +1966,7 @@ function renderOperatorView() {
             <label>Poll Timeout (ms)<input name="pollTimeoutMs" type="number" value="5000" /></label>
             <label>Auth User<input name="authUsername" placeholder="optional" /></label>
             <label>Auth Password<input name="authPassword" placeholder="optional" /></label>
+            <div class="subtle-note">MikroTik ke liye MikroTik REST (HTTPS) select karo, correct login do, aur router par www-ssl / REST enabled hona chahiye.</div>
             <label>Enable Active Poll
               <select name="pollEnabled">
                 <option value="true">Yes</option>
