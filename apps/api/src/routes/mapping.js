@@ -110,6 +110,36 @@ function makeRouteName(routeType, startNode, endNode, sequence = 1) {
   return `${start} to ${end} Fiber`;
 }
 
+function normalizeDraftPayload(payload = {}) {
+  const routePoints = Array.isArray(payload.routePoints)
+    ? payload.routePoints
+        .map((item) => ({
+          lat: toNumber(item.lat, NaN),
+          lng: toNumber(item.lng, NaN),
+        }))
+        .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+    : [];
+
+  const nodeDraft = payload.nodeDraft && Number.isFinite(Number(payload.nodeDraft.latitude)) && Number.isFinite(Number(payload.nodeDraft.longitude))
+    ? {
+        latitude: toNumber(payload.nodeDraft.latitude),
+        longitude: toNumber(payload.nodeDraft.longitude),
+      }
+    : null;
+
+  return {
+    routePoints,
+    routeComment: String(payload.routeComment || "").trim(),
+    nodeDraft,
+    routeMeta: {
+      name: String(payload.routeMeta?.name || "").trim(),
+      routeType: String(payload.routeMeta?.routeType || "").trim(),
+      startNodeId: String(payload.routeMeta?.startNodeId || "").trim(),
+      endNodeId: String(payload.routeMeta?.endNodeId || "").trim(),
+    },
+  };
+}
+
 function buildSmartInsights(nodes = [], routes = [], customers = []) {
   const splitters = nodes.filter((item) => item.type === "splitter");
   const endpoints = nodes.filter((item) => item.type === "customer_endpoint");
@@ -201,7 +231,7 @@ function buildSmartInsights(nodes = [], routes = [], customers = []) {
 }
 
 router.get("/overview", async (req, res) => {
-  const [nodes, routes, customers] = await Promise.all([
+  const [nodes, routes, customers, draft] = await Promise.all([
     prisma.networkNode.findMany({
       where: { tenantId: req.context.tenantId },
       orderBy: { createdAt: "desc" },
@@ -214,6 +244,9 @@ router.get("/overview", async (req, res) => {
       where: { tenantId: req.context.tenantId },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.mappingDraft.findFirst({
+      where: { tenantId: req.context.tenantId, draftType: "mapping" },
+    }),
   ]);
 
   res.json({
@@ -221,9 +254,42 @@ router.get("/overview", async (req, res) => {
     items: {
       nodes,
       routes,
+      draft: draft ? normalizeDraftPayload(JSON.parse(draft.draftJson || "{}")) : null,
       insights: buildSmartInsights(nodes, routes, customers),
     },
   });
+});
+
+router.post("/draft", async (req, res) => {
+  const normalized = normalizeDraftPayload(req.body || {});
+  const item = await prisma.mappingDraft.upsert({
+    where: {
+      tenantId_draftType: {
+        tenantId: req.context.tenantId,
+        draftType: "mapping",
+      },
+    },
+    create: {
+      id: `mapdraft-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      tenantId: req.context.tenantId,
+      draftType: "mapping",
+      draftJson: JSON.stringify(normalized),
+      note: normalized.routeComment || null,
+    },
+    update: {
+      draftJson: JSON.stringify(normalized),
+      note: normalized.routeComment || null,
+    },
+  });
+
+  res.json({ ok: true, item: normalizeDraftPayload(JSON.parse(item.draftJson || "{}")), message: "Mapping draft saved." });
+});
+
+router.post("/draft/clear", async (req, res) => {
+  await prisma.mappingDraft.deleteMany({
+    where: { tenantId: req.context.tenantId, draftType: "mapping" },
+  });
+  res.json({ ok: true, message: "Mapping draft cleared." });
 });
 
 router.post("/nodes", async (req, res) => {

@@ -36,6 +36,11 @@ const state = {
   mapBasemapMode: "satellite",
   mapDrawMode: false,
   mapDraftPoints: [],
+  mapDraftComment: "",
+  mapNodeDraft: {
+    latitude: "",
+    longitude: "",
+  },
   mapSearchQuery: "",
   mapLiveLocation: null,
   mapViewport: null,
@@ -288,10 +293,10 @@ function setOperatorLiveLocation(position, { updateForm = true, recenter = true 
   };
 
   if (updateForm) {
-    const latInput = document.getElementById("mapNodeLat");
-    const lngInput = document.getElementById("mapNodeLng");
-    if (latInput) latInput.value = String(latitude);
-    if (lngInput) lngInput.value = String(longitude);
+    state.mapNodeDraft = {
+      latitude: String(latitude),
+      longitude: String(longitude),
+    };
   }
 
   if (recenter) {
@@ -345,6 +350,42 @@ async function searchMapLocation(query) {
   };
   renderOperatorView();
   showStatus(`Map "${top.display_name}" par focus ho gaya.`);
+}
+
+function applyServerMappingDraft(draft) {
+  const normalized = draft || {};
+  state.mapDraftPoints = Array.isArray(normalized.routePoints) ? normalized.routePoints : [];
+  state.mapDraftComment = String(normalized.routeComment || "");
+  state.mapNodeDraft = normalized.nodeDraft
+    ? {
+        latitude: String(normalized.nodeDraft.latitude ?? ""),
+        longitude: String(normalized.nodeDraft.longitude ?? ""),
+      }
+    : { latitude: "", longitude: "" };
+}
+
+async function persistMappingDraft(showToast = false) {
+  const response = await fetchJson("/mapping/draft", {
+    method: "POST",
+    body: JSON.stringify({
+      routePoints: state.mapDraftPoints,
+      routeComment: state.mapDraftComment,
+      nodeDraft: state.mapNodeDraft,
+    }),
+  });
+  if (showToast) {
+    showStatus(response.message || "Mapping draft saved.");
+  }
+}
+
+async function clearPersistedMappingDraft(showToast = false) {
+  state.mapDraftPoints = [];
+  state.mapDraftComment = "";
+  state.mapNodeDraft = { latitude: "", longitude: "" };
+  await fetchJson("/mapping/draft/clear", { method: "POST" });
+  if (showToast) {
+    showStatus("Mapping draft clear ho gaya.");
+  }
 }
 
 function badgeClass(status) {
@@ -1540,10 +1581,10 @@ function renderMappingView(data, metrics) {
                 ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
               </select>
             </label>
-            <div class="mapping-form-two-col">
-              <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
-              <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
-            </div>
+              <div class="mapping-form-two-col">
+                <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" value="${escapeHtml(state.mapNodeDraft.latitude)}" required /></label>
+                <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" value="${escapeHtml(state.mapNodeDraft.longitude)}" required /></label>
+              </div>
             <div class="mapping-form-two-col">
               <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
               <label>Capacity<input name="capacity" type="number" /></label>
@@ -1600,7 +1641,12 @@ function renderMappingView(data, metrics) {
               <strong>${state.mapDraftPoints.length}</strong>
               <span>map points ready for route save</span>
             </div>
+            <label>Draft Comment
+              <textarea id="mappingDraftCommentInput" rows="3" placeholder="Operator yahan route, pole, lane, customer side ya koi bhi site comment likh sakta hai.">${escapeHtml(state.mapDraftComment)}</textarea>
+            </label>
             <div class="toolbar">
+              <button type="button" id="saveMappingDraftBtn" class="ghost-btn">Save Draft</button>
+              <button type="button" id="clearMappingDraftBtn" class="ghost-btn">Discard Draft</button>
               <button type="button" id="mapRouteModeBtn" class="ghost-btn">Resume Route Draw</button>
               <button class="primary-btn" type="submit">Save Drawn Route</button>
             </div>
@@ -1738,19 +1784,21 @@ function initNetworkMap() {
     const lat = Number(event.latlng.lat.toFixed(6));
     const lng = Number(event.latlng.lng.toFixed(6));
     if (state.mapInteractionMode === "drop_node") {
-      const latInput = document.getElementById("mapNodeLat");
-      const lngInput = document.getElementById("mapNodeLng");
-      if (latInput) latInput.value = String(lat);
-      if (lngInput) lngInput.value = String(lng);
+      state.mapNodeDraft = {
+        latitude: String(lat),
+        longitude: String(lng),
+      };
       state.mapInteractionMode = "browse";
       state.mapDrawMode = false;
-      showStatus("Map se node location pick ho gayi. Ab form save kar do.");
+      persistMappingDraft().catch(() => {});
+      showStatus("Map se node location pick ho gayi. Ab niche node form save kar do.");
       renderOperatorView();
       return;
     }
 
     if (state.mapInteractionMode === "draw_route") {
       state.mapDraftPoints.push({ lat, lng });
+      persistMappingDraft().catch(() => {});
       initNetworkMap();
     }
   });
@@ -3966,6 +4014,7 @@ function attachOperatorSectionEvents() {
       state.mapDraftPoints = [];
       state.mapInteractionMode = "browse";
       state.mapDrawMode = false;
+      persistMappingDraft().catch(() => {});
       renderOperatorView();
       showStatus("Route draft clear ho gaya.");
     });
@@ -4021,6 +4070,33 @@ function attachOperatorSectionEvents() {
       }
     });
   }
+
+  const mappingDraftCommentInput = document.getElementById("mappingDraftCommentInput");
+  if (mappingDraftCommentInput) {
+    mappingDraftCommentInput.addEventListener("input", (event) => {
+      state.mapDraftComment = String(event.currentTarget.value || "");
+    });
+    mappingDraftCommentInput.addEventListener("change", () => {
+      persistMappingDraft().catch(() => {});
+    });
+  }
+
+  const saveMappingDraftBtn = document.getElementById("saveMappingDraftBtn");
+  if (saveMappingDraftBtn) {
+    saveMappingDraftBtn.addEventListener("click", async () => {
+      await persistMappingDraft(true);
+    });
+  }
+
+  const clearMappingDraftBtn = document.getElementById("clearMappingDraftBtn");
+  if (clearMappingDraftBtn) {
+    clearMappingDraftBtn.addEventListener("click", async () => {
+      await clearPersistedMappingDraft(true);
+      state.mapInteractionMode = "browse";
+      state.mapDrawMode = false;
+      renderOperatorView();
+    });
+  }
   if (mappingSearchBtn) {
     mappingSearchBtn.addEventListener("click", async () => {
       try {
@@ -4062,6 +4138,25 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const mapNodeLat = document.getElementById("mapNodeLat");
+  const mapNodeLng = document.getElementById("mapNodeLng");
+  if (mapNodeLat) {
+    mapNodeLat.addEventListener("input", (event) => {
+      state.mapNodeDraft.latitude = String(event.currentTarget.value || "");
+    });
+    mapNodeLat.addEventListener("change", () => {
+      persistMappingDraft().catch(() => {});
+    });
+  }
+  if (mapNodeLng) {
+    mapNodeLng.addEventListener("input", (event) => {
+      state.mapNodeDraft.longitude = String(event.currentTarget.value || "");
+    });
+    mapNodeLng.addEventListener("change", () => {
+      persistMappingDraft().catch(() => {});
+    });
+  }
+
   const mapNodeForm = document.getElementById("mapNodeForm");
   if (mapNodeForm) {
     mapNodeForm.addEventListener("submit", async (event) => {
@@ -4077,7 +4172,9 @@ function attachOperatorSectionEvents() {
         body: JSON.stringify(payload),
       });
       event.currentTarget.reset();
+      state.mapNodeDraft = { latitude: "", longitude: "" };
       state.mapInteractionMode = "browse";
+      await persistMappingDraft();
       await loadOperatorData();
       renderOperatorView();
       showStatus("Map node smart save ho gaya. Type, name aur nearest parent backend se auto-tune kiye gaye honge.");
@@ -4095,12 +4192,15 @@ function attachOperatorSectionEvents() {
       const formData = new FormData(event.currentTarget);
       const payload = Object.fromEntries(formData.entries());
       payload.points = state.mapDraftPoints;
+      if (!String(payload.note || "").trim() && state.mapDraftComment) {
+        payload.note = state.mapDraftComment;
+      }
       await fetchJson("/mapping/routes", {
         method: "POST",
         body: JSON.stringify(payload),
       });
       event.currentTarget.reset();
-      state.mapDraftPoints = [];
+      await clearPersistedMappingDraft();
       state.mapInteractionMode = "browse";
       state.mapDrawMode = false;
       await loadOperatorData();
@@ -4264,6 +4364,7 @@ async function loadOperatorData() {
   state.data.networkNodes = mappingOverview.items?.nodes || [];
   state.data.fiberRoutes = mappingOverview.items?.routes || [];
   state.data.mapInsights = mappingOverview.items?.insights || null;
+  applyServerMappingDraft(mappingOverview.items?.draft || null);
   state.data.monitoredDevices = monitoringOverview.items?.devices || [];
   state.data.deviceAlerts = monitoringOverview.items?.alerts || [];
   state.data.monitoringSummary = monitoringOverview.items?.summary || null;
