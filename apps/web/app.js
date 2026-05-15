@@ -1290,8 +1290,34 @@ function renderMappingView(data, metrics) {
         <div class="inline-form-block mapping-form-card">
           <div class="section-head">
             <div>
+              <p class="eyebrow">Smart Autopilot</p>
+              <h3>AI-Like Auto Actions</h3>
+              <p class="subtle-note">Backend nearest splitter, route endpoint aur route type khud infer karega. Yahan se one-click repair bhi chala sakte ho.</p>
+            </div>
+          </div>
+          <div class="stack-list">
+            <article class="stack-card">
+              <div>
+                <strong>Auto-Link Customer Endpoints</strong>
+                <p>Nearest splitter ya FD box se unlinked customer endpoints ko connect karega.</p>
+              </div>
+              <div><button type="button" id="autoLinkEndpointsBtn" class="primary-btn">Run Auto-Link</button></div>
+            </article>
+            <article class="stack-card">
+              <div>
+                <strong>Auto-Fix Fiber Routes</strong>
+                <p>Saved route ke start/end nodes, route type, color aur naming ko smart tareeke se tune karega.</p>
+              </div>
+              <div><button type="button" id="autoFixRoutesBtn" class="primary-btn">Run Auto-Fix</button></div>
+            </article>
+          </div>
+        </div>
+        <div class="inline-form-block mapping-form-card">
+          <div class="section-head">
+            <div>
               <p class="eyebrow">Node Survey</p>
               <h3>Add Map Node</h3>
+              <p class="subtle-note">Customer select karoge to type, name aur nearest parent backend se smart fill ho sakte hain.</p>
             </div>
           </div>
           <form id="mapNodeForm" class="form-grid">
@@ -1305,7 +1331,7 @@ function renderMappingView(data, metrics) {
                 <option value="customer_endpoint">Customer Endpoint</option>
               </select>
             </label>
-            <label>Name<input name="name" required /></label>
+            <label>Name<input name="name" placeholder="Blank chhodo to smart name auto ban jayega" /></label>
             <label>Linked Customer
               <select name="relatedCustomerId">
                 <option value="">No customer mapping</option>
@@ -1337,10 +1363,11 @@ function renderMappingView(data, metrics) {
             <div>
               <p class="eyebrow">Route Survey</p>
               <h3>Save Fiber Route</h3>
+              <p class="subtle-note">Route name, type, endpoints, color aur core count backend se infer ho sakte hain.</p>
             </div>
           </div>
           <form id="fiberRouteForm" class="form-grid">
-            <label>Route Name<input name="name" required /></label>
+            <label>Route Name<input name="name" placeholder="Blank chhodo to smart route name auto ban jayega" /></label>
             <label>Route Type
               <select name="routeType">
                 <option value="feeder">Feeder</option>
@@ -3616,6 +3643,30 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const autoLinkEndpointsBtn = document.getElementById("autoLinkEndpointsBtn");
+  if (autoLinkEndpointsBtn) {
+    autoLinkEndpointsBtn.addEventListener("click", async () => {
+      const response = await fetchJson("/mapping/auto/link-endpoints", {
+        method: "POST",
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus(response.message || "Customer endpoints auto-linked.");
+    });
+  }
+
+  const autoFixRoutesBtn = document.getElementById("autoFixRoutesBtn");
+  if (autoFixRoutesBtn) {
+    autoFixRoutesBtn.addEventListener("click", async () => {
+      const response = await fetchJson("/mapping/auto/fix-routes", {
+        method: "POST",
+      });
+      await loadOperatorData();
+      renderOperatorView();
+      showStatus(response.message || "Fiber routes auto-optimized.");
+    });
+  }
+
   const useCurrentLocationBtn = document.getElementById("useCurrentLocationBtn");
   if (useCurrentLocationBtn) {
     useCurrentLocationBtn.addEventListener("click", () => {
@@ -3651,9 +3702,10 @@ function attachOperatorSectionEvents() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      event.currentTarget.reset();
       await loadOperatorData();
       renderOperatorView();
-      showStatus("Map node saved successfully.");
+      showStatus("Map node smart save ho gaya. Type, name aur nearest parent backend se auto-tune kiye gaye honge.");
     });
   }
 
@@ -3672,11 +3724,12 @@ function attachOperatorSectionEvents() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      event.currentTarget.reset();
       state.mapDraftPoints = [];
       state.mapDrawMode = false;
       await loadOperatorData();
       renderOperatorView();
-      showStatus("Fiber route saved successfully.");
+      showStatus("Fiber route smart save ho gaya. Route name, type aur endpoints backend se auto-infer ho sakte hain.");
     });
   }
 
