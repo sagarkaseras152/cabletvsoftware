@@ -1435,131 +1435,6 @@ function renderMappingView(data, metrics) {
             </div>
           </div>
         </div>
-        <aside class="mapping-side-panels">
-          <div class="inline-form-block mapping-form-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Smart Autopilot</p>
-                <h3>AI-Like Auto Actions</h3>
-                <p class="subtle-note">Nearest splitter link, route endpoint inference aur cleanup backend khud karega. Manual survey ke baad one-click repair yahin se chalao.</p>
-              </div>
-            </div>
-            <div class="stack-list">
-              <article class="stack-card">
-                <div>
-                  <strong>Auto-Link Customer Endpoints</strong>
-                  <p>Nearest splitter ya FD box se unlinked customer endpoints ko connect karega.</p>
-                </div>
-                <div><button type="button" id="autoLinkEndpointsBtn" class="primary-btn">Run Auto-Link</button></div>
-              </article>
-              <article class="stack-card">
-                <div>
-                  <strong>Auto-Fix Fiber Routes</strong>
-                  <p>Saved route ke start/end nodes, route type, color aur naming ko smart tareeke se tune karega.</p>
-                </div>
-                <div><button type="button" id="autoFixRoutesBtn" class="primary-btn">Run Auto-Fix</button></div>
-              </article>
-            </div>
-          </div>
-          <div class="inline-form-block mapping-form-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Node Survey</p>
-                <h3>Add Map Node</h3>
-                <p class="subtle-note">Customer select karoge to type, name aur nearest parent backend se smart fill ho sakte hain. Drop Node mode se lat/lng directly map se pick karo.</p>
-              </div>
-            </div>
-            <form id="mapNodeForm" class="form-grid">
-              <label>Node Type
-                <select name="type">
-                  <option value="olt">OLT</option>
-                  <option value="fd_box">FD Box</option>
-                  <option value="splitter">Splitter</option>
-                  <option value="joint">Joint</option>
-                  <option value="pole">Pole</option>
-                  <option value="customer_endpoint">Customer Endpoint</option>
-                </select>
-              </label>
-              <label>Name<input name="name" placeholder="Blank chhodo to smart name auto ban jayega" /></label>
-              <label>Linked Customer
-                <select name="relatedCustomerId">
-                  <option value="">No customer mapping</option>
-                  ${renderCustomerOptions(data.customers)}
-                </select>
-              </label>
-              <label>Parent Splitter / Node
-                <select name="parentNodeId">
-                  <option value="">No parent</option>
-                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
-                </select>
-              </label>
-              <div class="mapping-form-two-col">
-                <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
-                <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
-              </div>
-              <div class="mapping-form-two-col">
-                <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
-                <label>Capacity<input name="capacity" type="number" /></label>
-              </div>
-              <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
-              <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
-              <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
-              <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
-              <div class="toolbar">
-                <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
-                <button type="button" id="mapPickNodeBtn" class="ghost-btn">Pick from Map</button>
-                <button class="primary-btn" type="submit">Save Node</button>
-              </div>
-            </form>
-          </div>
-          <div class="inline-form-block mapping-form-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Route Survey</p>
-                <h3>Save Fiber Route</h3>
-                <p class="subtle-note">Manual draw allowed hai. Route name, type, endpoints, color aur core count backend se infer ho sakte hain.</p>
-              </div>
-            </div>
-            <form id="fiberRouteForm" class="form-grid">
-              <label>Route Name<input name="name" placeholder="Blank chhodo to smart route name auto ban jayega" /></label>
-              <div class="mapping-form-two-col">
-                <label>Route Type
-                  <select name="routeType">
-                    <option value="feeder">Feeder</option>
-                    <option value="distribution">Distribution</option>
-                    <option value="drop">Customer Drop</option>
-                  </select>
-                </label>
-                <label>Core Count<input name="coreCount" type="number" /></label>
-              </div>
-              <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
-              <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
-              <div class="mapping-form-two-col">
-                <label>Start Node
-                  <select name="startNodeId">
-                    <option value="">No start node</option>
-                    ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-                  </select>
-                </label>
-                <label>End Node
-                  <select name="endNodeId">
-                    <option value="">No end node</option>
-                    ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-                  </select>
-                </label>
-              </div>
-              <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
-              <div class="mapping-draft-note">
-                <strong>${state.mapDraftPoints.length}</strong>
-                <span>map points ready for route save</span>
-              </div>
-              <div class="toolbar">
-                <button type="button" id="mapRouteModeBtn" class="ghost-btn">Resume Route Draw</button>
-                <button class="primary-btn" type="submit">Save Drawn Route</button>
-              </div>
-            </form>
-          </div>
-        </aside>
       </div>
     </section>
     <section class="mapping-detail-layout mapping-detail-layout-clean">
@@ -1597,6 +1472,140 @@ function renderMappingView(data, metrics) {
           <div class="section-head"><div><p class="eyebrow">Fiber Routes</p><h2>Route Registry</h2></div></div>
           ${tableWrapper(renderFiberRouteTable(data.fiberRoutes))}
         </section>
+      </div>
+    </section>
+    <section class="panel mapping-control-shell">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Survey Controls</p>
+          <h2>Mapping Control Dock</h2>
+          <p class="subtle-note">Saare survey actions ab map ke niche hain. Map clean rahega, aur field operator ko niche se hi professional control board milega.</p>
+        </div>
+      </div>
+      <div class="mapping-control-dock">
+        <div class="inline-form-block mapping-form-card mapping-dock-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Smart Autopilot</p>
+              <h3>Auto Repair</h3>
+              <p class="subtle-note">Nearest splitter link aur route cleanup ke smart actions.</p>
+            </div>
+          </div>
+          <div class="stack-list">
+            <article class="stack-card">
+              <div>
+                <strong>Auto-Link Customer Endpoints</strong>
+                <p>Nearest splitter ya FD box se unlinked customer endpoints ko connect karega.</p>
+              </div>
+              <div><button type="button" id="autoLinkEndpointsBtn" class="primary-btn">Run Auto-Link</button></div>
+            </article>
+            <article class="stack-card">
+              <div>
+                <strong>Auto-Fix Fiber Routes</strong>
+                <p>Saved route ke start/end nodes, route type, color aur naming ko smart tareeke se tune karega.</p>
+              </div>
+              <div><button type="button" id="autoFixRoutesBtn" class="primary-btn">Run Auto-Fix</button></div>
+            </article>
+          </div>
+        </div>
+        <div class="inline-form-block mapping-form-card mapping-dock-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Node Survey</p>
+              <h3>Add Map Node</h3>
+              <p class="subtle-note">Customer select karoge to type, name aur nearest parent backend se smart fill ho sakte hain. Drop Node mode se lat/lng directly map se pick karo.</p>
+            </div>
+          </div>
+          <form id="mapNodeForm" class="form-grid">
+            <label>Node Type
+              <select name="type">
+                <option value="olt">OLT</option>
+                <option value="fd_box">FD Box</option>
+                <option value="splitter">Splitter</option>
+                <option value="joint">Joint</option>
+                <option value="pole">Pole</option>
+                <option value="customer_endpoint">Customer Endpoint</option>
+              </select>
+            </label>
+            <label>Name<input name="name" placeholder="Blank chhodo to smart name auto ban jayega" /></label>
+            <label>Linked Customer
+              <select name="relatedCustomerId">
+                <option value="">No customer mapping</option>
+                ${renderCustomerOptions(data.customers)}
+              </select>
+            </label>
+            <label>Parent Splitter / Node
+              <select name="parentNodeId">
+                <option value="">No parent</option>
+                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="mapping-form-two-col">
+              <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
+              <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
+            </div>
+            <div class="mapping-form-two-col">
+              <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
+              <label>Capacity<input name="capacity" type="number" /></label>
+            </div>
+            <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
+            <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
+            <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
+            <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
+            <div class="toolbar">
+              <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
+              <button type="button" id="mapPickNodeBtn" class="ghost-btn">Pick from Map</button>
+              <button class="primary-btn" type="submit">Save Node</button>
+            </div>
+          </form>
+        </div>
+        <div class="inline-form-block mapping-form-card mapping-dock-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Route Survey</p>
+              <h3>Save Fiber Route</h3>
+              <p class="subtle-note">Manual draw allowed hai. Route name, type, endpoints, color aur core count backend se infer ho sakte hain.</p>
+            </div>
+          </div>
+          <form id="fiberRouteForm" class="form-grid">
+            <label>Route Name<input name="name" placeholder="Blank chhodo to smart route name auto ban jayega" /></label>
+            <div class="mapping-form-two-col">
+              <label>Route Type
+                <select name="routeType">
+                  <option value="feeder">Feeder</option>
+                  <option value="distribution">Distribution</option>
+                  <option value="drop">Customer Drop</option>
+                </select>
+              </label>
+              <label>Core Count<input name="coreCount" type="number" /></label>
+            </div>
+            <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
+            <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
+            <div class="mapping-form-two-col">
+              <label>Start Node
+                <select name="startNodeId">
+                  <option value="">No start node</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                </select>
+              </label>
+              <label>End Node
+                <select name="endNodeId">
+                  <option value="">No end node</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+            <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
+            <div class="mapping-draft-note">
+              <strong>${state.mapDraftPoints.length}</strong>
+              <span>map points ready for route save</span>
+            </div>
+            <div class="toolbar">
+              <button type="button" id="mapRouteModeBtn" class="ghost-btn">Resume Route Draw</button>
+              <button class="primary-btn" type="submit">Save Drawn Route</button>
+            </div>
+          </form>
+        </div>
       </div>
     </section>
   `;

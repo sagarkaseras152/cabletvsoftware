@@ -975,7 +975,7 @@ button:hover,
 
 .mapping-workspace-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 390px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -1068,17 +1068,27 @@ button:hover,
 .mapping-side-panels {
   display: grid;
   gap: 18px;
-  position: sticky;
-  top: 18px;
-  align-self: start;
-  max-height: calc(100vh - 28px);
-  overflow-y: auto;
-  padding-right: 8px;
   min-width: 0;
 }
 
 .mapping-form-card {
   padding: 20px;
+}
+
+.mapping-control-shell {
+  margin-top: 22px;
+}
+
+.mapping-control-dock {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.mapping-dock-card {
+  margin-bottom: 0;
+  height: 100%;
 }
 
 .mapping-form-two-col {
@@ -1733,6 +1743,7 @@ input[type="search"] {
   .mapping-layout,
   .mapping-workspace-shell,
   .mapping-search-strip,
+  .mapping-control-dock,
   .mapping-form-two-col,
   .mapping-detail-layout {
     grid-template-columns: 1fr;
