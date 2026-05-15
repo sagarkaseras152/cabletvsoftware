@@ -32,8 +32,11 @@ const state = {
   selectedMonitoringDeviceId: "",
   operatorView: "dashboard",
   operatorCustomerSearch: "",
+  mapInteractionMode: "browse",
+  mapBasemapMode: "satellite",
   mapDrawMode: false,
   mapDraftPoints: [],
+  mapViewport: null,
   customerFormOpen: false,
   customerImportPreview: null,
   customerImportFileName: "",
@@ -202,6 +205,70 @@ function fileToDataUrl(file) {
     reader.onerror = () => reject(new Error("Photo read fail ho gaya."));
     reader.readAsDataURL(file);
   });
+}
+
+function downloadTextFile(filename, content, mimeType = "text/plain;charset=utf-8;") {
+  const blob = new Blob([content], { type: mimeType });
+  const link = document.createElement("a");
+  const href = URL.createObjectURL(blob);
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}
+
+function escapeXml(value = "") {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function buildMappingKml(nodes = [], routes = []) {
+  const placemarks = [];
+  nodes.forEach((node) => {
+    placemarks.push(`
+      <Placemark>
+        <name>${escapeXml(node.name)}</name>
+        <description>${escapeXml(`${node.type}${node.note ? ` | ${node.note}` : ""}`)}</description>
+        <Point><coordinates>${Number(node.longitude)},${Number(node.latitude)},0</coordinates></Point>
+      </Placemark>
+    `);
+  });
+  routes.forEach((route) => {
+    const points = parseRoutePoints(route.pathJson).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+    if (points.length < 2) return;
+    placemarks.push(`
+      <Placemark>
+        <name>${escapeXml(route.name)}</name>
+        <description>${escapeXml(`${route.routeType} | ${route.coreCount || 0} core`)}</description>
+        <LineString>
+          <tessellate>1</tessellate>
+          <coordinates>${points.map((item) => `${item.lng},${item.lat},0`).join(" ")}</coordinates>
+        </LineString>
+      </Placemark>
+    `);
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>CableOps Fiber Mapping</name>
+    ${placemarks.join("\n")}
+  </Document>
+</kml>`;
+}
+
+function getMappingFocusPoint(nodes = [], routes = [], draftPoints = []) {
+  if (draftPoints[0]) return draftPoints[0];
+  if (nodes[0]) return { lat: Number(nodes[0].latitude), lng: Number(nodes[0].longitude) };
+  const routePoint = routes
+    .flatMap((item) => parseRoutePoints(item.pathJson))
+    .find((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+  return routePoint || { lat: 23.2599, lng: 77.4126 };
 }
 
 function badgeClass(status) {
@@ -1230,27 +1297,184 @@ function renderFiberRouteTable(items) {
 
 function renderMappingView(data, metrics) {
   const insights = data.mapInsights || {};
+  const focusPoint = getMappingFocusPoint(data.networkNodes, data.fiberRoutes, state.mapDraftPoints);
+  const modeLabel = state.mapInteractionMode === "drop_node"
+    ? "Drop Node Mode"
+    : state.mapInteractionMode === "draw_route"
+      ? "Route Drawing Mode"
+      : "Browse Mode";
   return `
     <section class="panel">
-      <div class="section-head">
+      <div class="section-head mapping-shell-head">
         <div>
           <p class="eyebrow">Fiber Mapping</p>
-          <h2>Operator Survey Map</h2>
-          <p class="subtle-note">Har operator ka apna isolated network map. Nodes, splitters, fiber routes aur customer endpoints ko map par save karo.</p>
+          <h2>Operator Survey Workspace</h2>
+          <p class="subtle-note">Map ko survey control-room ki tarah use karo. Satellite view, manual drawing, node dropping aur Google Earth KML export sab ek jagah aligned hain.</p>
+        </div>
+        <div class="mapping-head-meta">
+          <span>${data.networkNodes.length} nodes</span>
+          <span>${data.fiberRoutes.length} routes</span>
+          <span>${state.mapDraftPoints.length} draft points</span>
         </div>
       </div>
       ${renderMapInsightCards(insights)}
-      <div class="mapping-map-wrap mapping-map-wrap-full">
-        <div id="networkMapCanvas" class="network-map-canvas network-map-canvas-large"></div>
-        <div class="mapping-draft-bar">
-          <strong>Route Draft:</strong>
-          <span>${state.mapDraftPoints.length} points</span>
-          <button type="button" id="startRouteDrawingBtn" class="ghost-btn">${state.mapDrawMode ? "Drawing Active" : "Start Route Drawing"}</button>
-          <button type="button" id="clearRouteDraftBtn" class="ghost-btn">Clear Draft</button>
+      <div class="mapping-workspace-shell">
+        <div class="mapping-map-panel">
+          <div class="mapping-map-wrap mapping-map-wrap-full">
+            <div class="mapping-toolbar-bar">
+              <div class="mapping-toolbar-group">
+                <button type="button" id="mapBrowseModeBtn" class="${state.mapInteractionMode === "browse" ? "primary-btn" : "ghost-btn"}">Browse</button>
+                <button type="button" id="mapDropNodeModeBtn" class="${state.mapInteractionMode === "drop_node" ? "primary-btn" : "ghost-btn"}">Drop Node</button>
+                <button type="button" id="startRouteDrawingBtn" class="${state.mapInteractionMode === "draw_route" ? "primary-btn" : "ghost-btn"}">Draw Route</button>
+                <button type="button" id="clearRouteDraftBtn" class="ghost-btn">Clear Draft</button>
+              </div>
+              <div class="mapping-toolbar-group">
+                <button type="button" id="mapSatelliteBtn" class="${state.mapBasemapMode === "satellite" ? "primary-btn" : "ghost-btn"}">Earth View</button>
+                <button type="button" id="mapStreetBtn" class="${state.mapBasemapMode === "street" ? "primary-btn" : "ghost-btn"}">Street View</button>
+                <button type="button" id="exportMappingKmlBtn" class="ghost-btn">Export KML</button>
+              </div>
+            </div>
+            <div id="networkMapCanvas" class="network-map-canvas network-map-canvas-large"></div>
+            <div class="mapping-draft-bar mapping-draft-bar-upgraded">
+              <div class="mapping-draft-stat">
+                <strong>${modeLabel}</strong>
+                <span>${state.mapInteractionMode === "drop_node" ? "Map par click karke node location pick karo." : state.mapInteractionMode === "draw_route" ? "Har click se fiber route point add hoga." : "Markers aur routes inspect karo, popup kholo, zoom/fit use karo."}</span>
+              </div>
+              <div class="mapping-draft-stat">
+                <strong>Draft Progress</strong>
+                <span>${state.mapDraftPoints.length} points ready | Focus ${focusPoint.lat.toFixed(4)}, ${focusPoint.lng.toFixed(4)}</span>
+              </div>
+            </div>
+          </div>
         </div>
+        <aside class="mapping-side-panels">
+          <div class="inline-form-block mapping-form-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Smart Autopilot</p>
+                <h3>AI-Like Auto Actions</h3>
+                <p class="subtle-note">Nearest splitter link, route endpoint inference aur cleanup backend khud karega. Manual survey ke baad one-click repair yahin se chalao.</p>
+              </div>
+            </div>
+            <div class="stack-list">
+              <article class="stack-card">
+                <div>
+                  <strong>Auto-Link Customer Endpoints</strong>
+                  <p>Nearest splitter ya FD box se unlinked customer endpoints ko connect karega.</p>
+                </div>
+                <div><button type="button" id="autoLinkEndpointsBtn" class="primary-btn">Run Auto-Link</button></div>
+              </article>
+              <article class="stack-card">
+                <div>
+                  <strong>Auto-Fix Fiber Routes</strong>
+                  <p>Saved route ke start/end nodes, route type, color aur naming ko smart tareeke se tune karega.</p>
+                </div>
+                <div><button type="button" id="autoFixRoutesBtn" class="primary-btn">Run Auto-Fix</button></div>
+              </article>
+            </div>
+          </div>
+          <div class="inline-form-block mapping-form-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Node Survey</p>
+                <h3>Add Map Node</h3>
+                <p class="subtle-note">Customer select karoge to type, name aur nearest parent backend se smart fill ho sakte hain. Drop Node mode se lat/lng directly map se pick karo.</p>
+              </div>
+            </div>
+            <form id="mapNodeForm" class="form-grid">
+              <label>Node Type
+                <select name="type">
+                  <option value="olt">OLT</option>
+                  <option value="fd_box">FD Box</option>
+                  <option value="splitter">Splitter</option>
+                  <option value="joint">Joint</option>
+                  <option value="pole">Pole</option>
+                  <option value="customer_endpoint">Customer Endpoint</option>
+                </select>
+              </label>
+              <label>Name<input name="name" placeholder="Blank chhodo to smart name auto ban jayega" /></label>
+              <label>Linked Customer
+                <select name="relatedCustomerId">
+                  <option value="">No customer mapping</option>
+                  ${renderCustomerOptions(data.customers)}
+                </select>
+              </label>
+              <label>Parent Splitter / Node
+                <select name="parentNodeId">
+                  <option value="">No parent</option>
+                  ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
+                </select>
+              </label>
+              <div class="mapping-form-two-col">
+                <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
+                <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
+              </div>
+              <div class="mapping-form-two-col">
+                <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
+                <label>Capacity<input name="capacity" type="number" /></label>
+              </div>
+              <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
+              <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
+              <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
+              <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
+              <div class="toolbar">
+                <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
+                <button type="button" id="mapPickNodeBtn" class="ghost-btn">Pick from Map</button>
+                <button class="primary-btn" type="submit">Save Node</button>
+              </div>
+            </form>
+          </div>
+          <div class="inline-form-block mapping-form-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Route Survey</p>
+                <h3>Save Fiber Route</h3>
+                <p class="subtle-note">Manual draw allowed hai. Route name, type, endpoints, color aur core count backend se infer ho sakte hain.</p>
+              </div>
+            </div>
+            <form id="fiberRouteForm" class="form-grid">
+              <label>Route Name<input name="name" placeholder="Blank chhodo to smart route name auto ban jayega" /></label>
+              <div class="mapping-form-two-col">
+                <label>Route Type
+                  <select name="routeType">
+                    <option value="feeder">Feeder</option>
+                    <option value="distribution">Distribution</option>
+                    <option value="drop">Customer Drop</option>
+                  </select>
+                </label>
+                <label>Core Count<input name="coreCount" type="number" /></label>
+              </div>
+              <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
+              <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
+              <div class="mapping-form-two-col">
+                <label>Start Node
+                  <select name="startNodeId">
+                    <option value="">No start node</option>
+                    ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                  </select>
+                </label>
+                <label>End Node
+                  <select name="endNodeId">
+                    <option value="">No end node</option>
+                    ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
+                  </select>
+                </label>
+              </div>
+              <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
+              <div class="mapping-draft-note">
+                <strong>${state.mapDraftPoints.length}</strong>
+                <span>map points ready for route save</span>
+              </div>
+              <div class="toolbar">
+                <button type="button" id="mapRouteModeBtn" class="ghost-btn">Resume Route Draw</button>
+                <button class="primary-btn" type="submit">Save Drawn Route</button>
+              </div>
+            </form>
+          </div>
+        </aside>
       </div>
     </section>
-    <section class="mapping-detail-layout">
+    <section class="mapping-detail-layout mapping-detail-layout-clean">
       <div class="mapping-detail-main">
         <section class="split-grid dashboard-split">
           <article class="panel">
@@ -1286,119 +1510,6 @@ function renderMappingView(data, metrics) {
           ${tableWrapper(renderFiberRouteTable(data.fiberRoutes))}
         </section>
       </div>
-      <aside class="mapping-side-panels">
-        <div class="inline-form-block mapping-form-card">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Smart Autopilot</p>
-              <h3>AI-Like Auto Actions</h3>
-              <p class="subtle-note">Backend nearest splitter, route endpoint aur route type khud infer karega. Yahan se one-click repair bhi chala sakte ho.</p>
-            </div>
-          </div>
-          <div class="stack-list">
-            <article class="stack-card">
-              <div>
-                <strong>Auto-Link Customer Endpoints</strong>
-                <p>Nearest splitter ya FD box se unlinked customer endpoints ko connect karega.</p>
-              </div>
-              <div><button type="button" id="autoLinkEndpointsBtn" class="primary-btn">Run Auto-Link</button></div>
-            </article>
-            <article class="stack-card">
-              <div>
-                <strong>Auto-Fix Fiber Routes</strong>
-                <p>Saved route ke start/end nodes, route type, color aur naming ko smart tareeke se tune karega.</p>
-              </div>
-              <div><button type="button" id="autoFixRoutesBtn" class="primary-btn">Run Auto-Fix</button></div>
-            </article>
-          </div>
-        </div>
-        <div class="inline-form-block mapping-form-card">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Node Survey</p>
-              <h3>Add Map Node</h3>
-              <p class="subtle-note">Customer select karoge to type, name aur nearest parent backend se smart fill ho sakte hain.</p>
-            </div>
-          </div>
-          <form id="mapNodeForm" class="form-grid">
-            <label>Node Type
-              <select name="type">
-                <option value="olt">OLT</option>
-                <option value="fd_box">FD Box</option>
-                <option value="splitter">Splitter</option>
-                <option value="joint">Joint</option>
-                <option value="pole">Pole</option>
-                <option value="customer_endpoint">Customer Endpoint</option>
-              </select>
-            </label>
-            <label>Name<input name="name" placeholder="Blank chhodo to smart name auto ban jayega" /></label>
-            <label>Linked Customer
-              <select name="relatedCustomerId">
-                <option value="">No customer mapping</option>
-                ${renderCustomerOptions(data.customers)}
-              </select>
-            </label>
-            <label>Parent Splitter / Node
-              <select name="parentNodeId">
-                <option value="">No parent</option>
-                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} | ${escapeHtml(item.type)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Latitude<input id="mapNodeLat" name="latitude" type="number" step="any" required /></label>
-            <label>Longitude<input id="mapNodeLng" name="longitude" type="number" step="any" required /></label>
-            <label>Fiber Core Count<input name="fiberCoreCount" type="number" /></label>
-            <label>Splitter Ratio<input name="splitterRatio" placeholder="1:8 / 1:16 / 1:32" /></label>
-            <label>Capacity<input name="capacity" type="number" /></label>
-            <label>Color / Core Code<input name="colorCode" placeholder="Red core / Orange route" /></label>
-            <label>Photo<input id="mapNodePhoto" type="file" accept="image/*" capture="environment" /></label>
-            <label>Note<input name="note" placeholder="Pole no, cabinet note, route detail" /></label>
-            <div class="toolbar">
-              <button type="button" id="useCurrentLocationBtn" class="ghost-btn">Use Current Location</button>
-              <button class="primary-btn" type="submit">Save Node</button>
-            </div>
-          </form>
-        </div>
-        <div class="inline-form-block mapping-form-card">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Route Survey</p>
-              <h3>Save Fiber Route</h3>
-              <p class="subtle-note">Route name, type, endpoints, color aur core count backend se infer ho sakte hain.</p>
-            </div>
-          </div>
-          <form id="fiberRouteForm" class="form-grid">
-            <label>Route Name<input name="name" placeholder="Blank chhodo to smart route name auto ban jayega" /></label>
-            <label>Route Type
-              <select name="routeType">
-                <option value="feeder">Feeder</option>
-                <option value="distribution">Distribution</option>
-                <option value="drop">Customer Drop</option>
-              </select>
-            </label>
-            <label>Core Count<input name="coreCount" type="number" /></label>
-            <label>Cable Type<input name="cableType" placeholder="Aerial / Underground / ADSS" /></label>
-            <label>Color Code<input name="colorCode" placeholder="24 core red / yellow sheath" /></label>
-            <label>Start Node
-              <select name="startNodeId">
-                <option value="">No start node</option>
-                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-              </select>
-            </label>
-            <label>End Node
-              <select name="endNodeId">
-                <option value="">No end node</option>
-                ${data.networkNodes.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Route Note<input name="note" placeholder="Survey note, side road, lane" /></label>
-            <div class="mapping-draft-note">
-              <strong>${state.mapDraftPoints.length}</strong>
-              <span>map points ready for route save</span>
-            </div>
-            <button class="primary-btn" type="submit">Save Drawn Route</button>
-          </form>
-        </div>
-      </aside>
     </section>
   `;
 }
@@ -1414,15 +1525,33 @@ function initNetworkMap() {
 
   const nodes = state.data.networkNodes || [];
   const routes = state.data.fiberRoutes || [];
-  const centerLat = nodes[0]?.latitude || 23.2599;
-  const centerLng = nodes[0]?.longitude || 77.4126;
-  const map = window.L.map(mapCanvas).setView([centerLat, centerLng], nodes.length ? 14 : 5);
+  const fallbackPoint = getMappingFocusPoint(nodes, routes, state.mapDraftPoints);
+  const centerLat = state.mapViewport?.lat || fallbackPoint.lat;
+  const centerLng = state.mapViewport?.lng || fallbackPoint.lng;
+  const zoomLevel = state.mapViewport?.zoom || (nodes.length ? 15 : 5);
+  const map = window.L.map(mapCanvas, { zoomControl: false }).setView([centerLat, centerLng], zoomLevel);
   state.networkLeafletMap = map;
+  window.L.control.zoom({ position: "bottomright" }).addTo(map);
 
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  const streetLayer = window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+  });
+  const satelliteLayer = window.L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri",
+  });
+  const labelsLayer = window.L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Labels &copy; Esri",
+  });
+
+  if (state.mapBasemapMode === "satellite") {
+    satelliteLayer.addTo(map);
+    labelsLayer.addTo(map);
+  } else {
+    streetLayer.addTo(map);
+  }
 
   const markerColor = {
     olt: "#0b57d0",
@@ -1445,6 +1574,7 @@ function initNetworkMap() {
       <div class="map-popup">
         <strong>${escapeHtml(node.name)}</strong><br/>
         <span>${escapeHtml(node.type)}</span><br/>
+        <span>${Number(node.latitude).toFixed(6)}, ${Number(node.longitude).toFixed(6)}</span><br/>
         ${node.photoDataUrl ? `<img src="${escapeHtml(node.photoDataUrl)}" alt="${escapeHtml(node.name)}" style="width:160px;border-radius:12px;margin-top:10px;" />` : ""}
       </div>
     `);
@@ -1474,13 +1604,44 @@ function initNetworkMap() {
     }).addTo(map);
   }
 
+  state.mapDraftPoints.forEach((point, index) => {
+    window.L.circleMarker([point.lat, point.lng], {
+      radius: 5,
+      color: "#ffffff",
+      weight: 2,
+      fillColor: "#ef4444",
+      fillOpacity: 1,
+    }).addTo(map).bindTooltip(`Draft ${index + 1}`, { direction: "top", offset: [0, -4] });
+  });
+
   map.on("click", (event) => {
-    if (!state.mapDrawMode) return;
-    state.mapDraftPoints.push({
-      lat: Number(event.latlng.lat.toFixed(6)),
-      lng: Number(event.latlng.lng.toFixed(6)),
-    });
-    initNetworkMap();
+    const lat = Number(event.latlng.lat.toFixed(6));
+    const lng = Number(event.latlng.lng.toFixed(6));
+    if (state.mapInteractionMode === "drop_node") {
+      const latInput = document.getElementById("mapNodeLat");
+      const lngInput = document.getElementById("mapNodeLng");
+      if (latInput) latInput.value = String(lat);
+      if (lngInput) lngInput.value = String(lng);
+      state.mapInteractionMode = "browse";
+      state.mapDrawMode = false;
+      showStatus("Map se node location pick ho gayi. Ab form save kar do.");
+      renderOperatorView();
+      return;
+    }
+
+    if (state.mapInteractionMode === "draw_route") {
+      state.mapDraftPoints.push({ lat, lng });
+      initNetworkMap();
+    }
+  });
+
+  map.on("moveend", () => {
+    const center = map.getCenter();
+    state.mapViewport = {
+      lat: Number(center.lat.toFixed(6)),
+      lng: Number(center.lng.toFixed(6)),
+      zoom: map.getZoom(),
+    };
   });
 
   if (nodes.length || routes.length || state.mapDraftPoints.length) {
@@ -1490,7 +1651,7 @@ function initNetworkMap() {
       parseRoutePoints(route.pathJson).forEach((point) => bounds.push([point.lat, point.lng]));
     });
     state.mapDraftPoints.forEach((point) => bounds.push([point.lat, point.lng]));
-    if (bounds.length > 1) {
+    if (!state.mapViewport && bounds.length > 1) {
       map.fitBounds(bounds, { padding: [24, 24] });
     }
   }
@@ -3627,9 +3788,50 @@ function attachOperatorSectionEvents() {
   const startRouteDrawingBtn = document.getElementById("startRouteDrawingBtn");
   if (startRouteDrawingBtn) {
     startRouteDrawingBtn.addEventListener("click", () => {
+      state.mapInteractionMode = "draw_route";
       state.mapDrawMode = true;
       showStatus("Map par click karke fiber route points add karo.");
-      initNetworkMap();
+      renderOperatorView();
+    });
+  }
+
+  const mapRouteModeBtn = document.getElementById("mapRouteModeBtn");
+  if (mapRouteModeBtn) {
+    mapRouteModeBtn.addEventListener("click", () => {
+      state.mapInteractionMode = "draw_route";
+      state.mapDrawMode = true;
+      showStatus("Route drawing resume ho gaya. Map par click karke next points add karo.");
+      renderOperatorView();
+    });
+  }
+
+  const mapBrowseModeBtn = document.getElementById("mapBrowseModeBtn");
+  if (mapBrowseModeBtn) {
+    mapBrowseModeBtn.addEventListener("click", () => {
+      state.mapInteractionMode = "browse";
+      state.mapDrawMode = false;
+      renderOperatorView();
+      showStatus("Map browse mode active hai.");
+    });
+  }
+
+  const mapDropNodeModeBtn = document.getElementById("mapDropNodeModeBtn");
+  if (mapDropNodeModeBtn) {
+    mapDropNodeModeBtn.addEventListener("click", () => {
+      state.mapInteractionMode = "drop_node";
+      state.mapDrawMode = false;
+      renderOperatorView();
+      showStatus("Map par click karke node location pick karo.");
+    });
+  }
+
+  const mapPickNodeBtn = document.getElementById("mapPickNodeBtn");
+  if (mapPickNodeBtn) {
+    mapPickNodeBtn.addEventListener("click", () => {
+      state.mapInteractionMode = "drop_node";
+      state.mapDrawMode = false;
+      renderOperatorView();
+      showStatus("Map par click karke node location form me bharo.");
     });
   }
 
@@ -3637,9 +3839,37 @@ function attachOperatorSectionEvents() {
   if (clearRouteDraftBtn) {
     clearRouteDraftBtn.addEventListener("click", () => {
       state.mapDraftPoints = [];
+      state.mapInteractionMode = "browse";
       state.mapDrawMode = false;
       renderOperatorView();
       showStatus("Route draft clear ho gaya.");
+    });
+  }
+
+  const mapSatelliteBtn = document.getElementById("mapSatelliteBtn");
+  if (mapSatelliteBtn) {
+    mapSatelliteBtn.addEventListener("click", () => {
+      state.mapBasemapMode = "satellite";
+      renderOperatorView();
+      showStatus("Earth-like satellite basemap active ho gaya.");
+    });
+  }
+
+  const mapStreetBtn = document.getElementById("mapStreetBtn");
+  if (mapStreetBtn) {
+    mapStreetBtn.addEventListener("click", () => {
+      state.mapBasemapMode = "street";
+      renderOperatorView();
+      showStatus("Street basemap active ho gaya.");
+    });
+  }
+
+  const exportMappingKmlBtn = document.getElementById("exportMappingKmlBtn");
+  if (exportMappingKmlBtn) {
+    exportMappingKmlBtn.addEventListener("click", () => {
+      const kml = buildMappingKml(state.data.networkNodes, state.data.fiberRoutes);
+      downloadTextFile("cableops-network-map.kml", kml, "application/vnd.google-earth.kml+xml;charset=utf-8;");
+      showStatus("KML export ready hai. Isko Google Earth me open kar sakte ho.");
     });
   }
 
@@ -3703,6 +3933,7 @@ function attachOperatorSectionEvents() {
         body: JSON.stringify(payload),
       });
       event.currentTarget.reset();
+      state.mapInteractionMode = "browse";
       await loadOperatorData();
       renderOperatorView();
       showStatus("Map node smart save ho gaya. Type, name aur nearest parent backend se auto-tune kiye gaye honge.");
@@ -3726,6 +3957,7 @@ function attachOperatorSectionEvents() {
       });
       event.currentTarget.reset();
       state.mapDraftPoints = [];
+      state.mapInteractionMode = "browse";
       state.mapDrawMode = false;
       await loadOperatorData();
       renderOperatorView();
