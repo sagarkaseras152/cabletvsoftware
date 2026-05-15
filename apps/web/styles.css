@@ -994,7 +994,11 @@ button:hover,
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 18px 0;
+  padding: 0;
+}
+
+.mapping-toolbar-bar-bottom {
+  padding: 0 18px;
 }
 
 .mapping-toolbar-group {
@@ -1035,6 +1039,13 @@ button:hover,
   min-height: 680px;
 }
 
+.mapping-surface-controls {
+  display: grid;
+  gap: 14px;
+  padding: 16px 0 18px;
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(243, 247, 251, 0.98));
+}
+
 .mapping-draft-bar {
   display: flex;
   gap: 12px;
@@ -1053,6 +1064,38 @@ button:hover,
   display: grid;
   gap: 4px;
   min-width: min(100%, 280px);
+}
+
+.mapping-draft-stat-button {
+  text-align: left;
+  background: rgba(11, 87, 208, 0.08);
+  border: 1px solid rgba(11, 87, 208, 0.14);
+  border-radius: 18px;
+  padding: 14px 16px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mapping-inline-comment {
+  margin: 0 18px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.mapping-inline-dock {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding: 0 18px;
+}
+
+.mapping-inline-card {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .mapping-draft-stat strong {
@@ -1125,6 +1168,27 @@ button:hover,
   display: grid;
   gap: 4px;
   min-width: 170px;
+}
+
+.network-node-icon-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.network-node-marker {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--node-color) 18%, white);
+  color: #0f172a;
+  border: 2px solid var(--node-color);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .import-block {
@@ -1744,6 +1808,7 @@ input[type="search"] {
   .mapping-workspace-shell,
   .mapping-search-strip,
   .mapping-control-dock,
+  .mapping-inline-dock,
   .mapping-form-two-col,
   .mapping-detail-layout {
     grid-template-columns: 1fr;
