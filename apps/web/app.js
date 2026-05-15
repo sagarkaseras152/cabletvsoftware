@@ -36,6 +36,8 @@ const state = {
   mapBasemapMode: "satellite",
   mapDrawMode: false,
   mapDraftPoints: [],
+  mapSearchQuery: "",
+  mapLiveLocation: null,
   mapViewport: null,
   customerFormOpen: false,
   customerImportPreview: null,
@@ -264,11 +266,85 @@ function buildMappingKml(nodes = [], routes = []) {
 
 function getMappingFocusPoint(nodes = [], routes = [], draftPoints = []) {
   if (draftPoints[0]) return draftPoints[0];
+  if (state.mapLiveLocation?.latitude && state.mapLiveLocation?.longitude) {
+    return { lat: Number(state.mapLiveLocation.latitude), lng: Number(state.mapLiveLocation.longitude) };
+  }
   if (nodes[0]) return { lat: Number(nodes[0].latitude), lng: Number(nodes[0].longitude) };
   const routePoint = routes
     .flatMap((item) => parseRoutePoints(item.pathJson))
     .find((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
   return routePoint || { lat: 23.2599, lng: 77.4126 };
+}
+
+function setOperatorLiveLocation(position, { updateForm = true, recenter = true } = {}) {
+  const latitude = Number(position.coords.latitude.toFixed(6));
+  const longitude = Number(position.coords.longitude.toFixed(6));
+  const accuracyMeters = Math.round(Number(position.coords.accuracy || 0));
+  state.mapLiveLocation = {
+    latitude,
+    longitude,
+    accuracyMeters,
+    capturedAt: new Date().toISOString(),
+  };
+
+  if (updateForm) {
+    const latInput = document.getElementById("mapNodeLat");
+    const lngInput = document.getElementById("mapNodeLng");
+    if (latInput) latInput.value = String(latitude);
+    if (lngInput) lngInput.value = String(longitude);
+  }
+
+  if (recenter) {
+    state.mapViewport = {
+      lat: latitude,
+      lng: longitude,
+      zoom: Math.max(Number(state.mapViewport?.zoom || 0), 18) || 18,
+    };
+  }
+}
+
+function requestOperatorLiveLocation(options = {}) {
+  if (!navigator.geolocation) {
+    showStatus("Geolocation is browser me available nahi hai.", "error");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      setOperatorLiveLocation(position, options);
+      renderOperatorView();
+      showStatus(`Live location sync ho gayi. Accuracy approx ${state.mapLiveLocation?.accuracyMeters || 0}m.`);
+    },
+    () => showStatus("Live location fetch nahi hui. GPS ya browser permission check karo.", "error"),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+  );
+}
+
+async function searchMapLocation(query) {
+  const cleaned = String(query || "").trim();
+  if (!cleaned) {
+    showStatus("Search karne ke liye place ya address likho.", "error");
+    return;
+  }
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(cleaned)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error("Search service unavailable.");
+  }
+  const items = await response.json();
+  const top = items?.[0];
+  if (!top) {
+    throw new Error("Location match nahi mila.");
+  }
+  state.mapViewport = {
+    lat: Number(top.lat),
+    lng: Number(top.lon),
+    zoom: 17,
+  };
+  renderOperatorView();
+  showStatus(`Map "${top.display_name}" par focus ho gaya.`);
 }
 
 function badgeClass(status) {
@@ -1304,7 +1380,7 @@ function renderMappingView(data, metrics) {
       ? "Route Drawing Mode"
       : "Browse Mode";
   return `
-    <section class="panel">
+    <section class="panel mapping-panel-shell">
       <div class="section-head mapping-shell-head">
         <div>
           <p class="eyebrow">Fiber Mapping</p>
@@ -1331,8 +1407,16 @@ function renderMappingView(data, metrics) {
               <div class="mapping-toolbar-group">
                 <button type="button" id="mapSatelliteBtn" class="${state.mapBasemapMode === "satellite" ? "primary-btn" : "ghost-btn"}">Earth View</button>
                 <button type="button" id="mapStreetBtn" class="${state.mapBasemapMode === "street" ? "primary-btn" : "ghost-btn"}">Street View</button>
+                <button type="button" id="mapLocateOperatorBtn" class="ghost-btn">Locate Me</button>
                 <button type="button" id="exportMappingKmlBtn" class="ghost-btn">Export KML</button>
               </div>
+            </div>
+            <div class="mapping-search-strip">
+              <label class="mapping-search-field">
+                Map Search
+                <input id="mappingSearchInput" type="search" value="${escapeHtml(state.mapSearchQuery)}" placeholder="Area, road, village, customer landmark" />
+              </label>
+              <button type="button" id="mappingSearchBtn" class="primary-btn">Search</button>
             </div>
             <div id="networkMapCanvas" class="network-map-canvas network-map-canvas-large"></div>
             <div class="mapping-draft-bar mapping-draft-bar-upgraded">
@@ -1343,6 +1427,10 @@ function renderMappingView(data, metrics) {
               <div class="mapping-draft-stat">
                 <strong>Draft Progress</strong>
                 <span>${state.mapDraftPoints.length} points ready | Focus ${focusPoint.lat.toFixed(4)}, ${focusPoint.lng.toFixed(4)}</span>
+              </div>
+              <div class="mapping-draft-stat">
+                <strong>Live Operator GPS</strong>
+                <span>${state.mapLiveLocation ? `${state.mapLiveLocation.latitude.toFixed(6)}, ${state.mapLiveLocation.longitude.toFixed(6)} | accuracy ~${state.mapLiveLocation.accuracyMeters || 0}m` : "Abhi live GPS capture nahi hui."}</span>
               </div>
             </div>
           </div>
@@ -1579,6 +1667,29 @@ function initNetworkMap() {
       </div>
     `);
   });
+
+  if (state.mapLiveLocation?.latitude && state.mapLiveLocation?.longitude) {
+    window.L.circle([state.mapLiveLocation.latitude, state.mapLiveLocation.longitude], {
+      radius: Math.max(Number(state.mapLiveLocation.accuracyMeters || 0), 12),
+      color: "#0b57d0",
+      weight: 1,
+      fillColor: "#0b57d0",
+      fillOpacity: 0.12,
+    }).addTo(map);
+    window.L.circleMarker([state.mapLiveLocation.latitude, state.mapLiveLocation.longitude], {
+      radius: 7,
+      color: "#ffffff",
+      weight: 2,
+      fillColor: "#0b57d0",
+      fillOpacity: 1,
+    }).addTo(map).bindPopup(`
+      <div class="map-popup">
+        <strong>Operator Live Location</strong><br/>
+        <span>${state.mapLiveLocation.latitude.toFixed(6)}, ${state.mapLiveLocation.longitude.toFixed(6)}</span><br/>
+        <span>Accuracy ~${state.mapLiveLocation.accuracyMeters || 0} meters</span>
+      </div>
+    `);
+  }
 
   routes.forEach((route) => {
     const points = parseRoutePoints(route.pathJson).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
@@ -2350,7 +2461,12 @@ function renderOperatorView() {
   root.innerHTML = views[state.operatorView];
   attachOperatorSectionEvents();
   if (state.operatorView === "mapping") {
-    window.setTimeout(() => initNetworkMap(), 0);
+    window.setTimeout(() => {
+      initNetworkMap();
+      if (!state.mapLiveLocation) {
+        requestOperatorLiveLocation({ updateForm: false, recenter: !state.data.networkNodes.length });
+      }
+    }, 0);
   }
 }
 
@@ -3864,12 +3980,45 @@ function attachOperatorSectionEvents() {
     });
   }
 
+  const mapLocateOperatorBtn = document.getElementById("mapLocateOperatorBtn");
+  if (mapLocateOperatorBtn) {
+    mapLocateOperatorBtn.addEventListener("click", () => {
+      requestOperatorLiveLocation({ updateForm: false, recenter: true });
+    });
+  }
+
   const exportMappingKmlBtn = document.getElementById("exportMappingKmlBtn");
   if (exportMappingKmlBtn) {
     exportMappingKmlBtn.addEventListener("click", () => {
       const kml = buildMappingKml(state.data.networkNodes, state.data.fiberRoutes);
       downloadTextFile("cableops-network-map.kml", kml, "application/vnd.google-earth.kml+xml;charset=utf-8;");
       showStatus("KML export ready hai. Isko Google Earth me open kar sakte ho.");
+    });
+  }
+
+  const mappingSearchInput = document.getElementById("mappingSearchInput");
+  const mappingSearchBtn = document.getElementById("mappingSearchBtn");
+  if (mappingSearchInput) {
+    mappingSearchInput.addEventListener("input", (event) => {
+      state.mapSearchQuery = String(event.currentTarget.value || "");
+    });
+    mappingSearchInput.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      try {
+        await searchMapLocation(event.currentTarget.value);
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "Map search nahi chal payi."), "error");
+      }
+    });
+  }
+  if (mappingSearchBtn) {
+    mappingSearchBtn.addEventListener("click", async () => {
+      try {
+        await searchMapLocation(document.getElementById("mappingSearchInput")?.value || state.mapSearchQuery);
+      } catch (error) {
+        showStatus(parseErrorMessage(error, "Map search nahi chal payi."), "error");
+      }
     });
   }
 
@@ -3900,21 +4049,7 @@ function attachOperatorSectionEvents() {
   const useCurrentLocationBtn = document.getElementById("useCurrentLocationBtn");
   if (useCurrentLocationBtn) {
     useCurrentLocationBtn.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        showStatus("Geolocation is browser me available nahi hai.", "error");
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const latInput = document.getElementById("mapNodeLat");
-          const lngInput = document.getElementById("mapNodeLng");
-          if (latInput) latInput.value = String(position.coords.latitude.toFixed(6));
-          if (lngInput) lngInput.value = String(position.coords.longitude.toFixed(6));
-          showStatus("Current location form me aa gayi.");
-        },
-        () => showStatus("Current location fetch nahi hui.", "error"),
-        { enableHighAccuracy: true, timeout: 10000 },
-      );
+      requestOperatorLiveLocation({ updateForm: true, recenter: true });
     });
   }
 
