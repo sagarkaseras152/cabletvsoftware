@@ -34,6 +34,7 @@ body {
   margin: 0;
   font-family: "Manrope", sans-serif;
   color: var(--text);
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 8% 10%, rgba(11, 87, 208, 0.16), transparent 28%),
     radial-gradient(circle at 92% 12%, rgba(11, 143, 131, 0.14), transparent 24%),
@@ -57,6 +58,7 @@ body::before {
   width: min(1400px, calc(100% - 32px));
   margin: 0 auto;
   padding: 28px 0 64px;
+  overflow-x: clip;
 }
 
 .admin-shell {
@@ -77,8 +79,9 @@ body::before {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: clamp(260px, 22vw, 300px) minmax(0, 1fr);
   gap: 24px;
+  align-items: start;
 }
 
 .operator-shell {
@@ -114,6 +117,9 @@ body::before {
   align-self: start;
   position: sticky;
   top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebar-note {
@@ -130,6 +136,8 @@ body::before {
 }
 
 .workspace-main {
+  display: grid;
+  align-content: start;
   min-width: 0;
 }
 
@@ -299,6 +307,7 @@ input[type="search"]:focus {
   justify-content: space-between;
   align-items: center;
   gap: 18px;
+  flex-wrap: wrap;
   margin-bottom: 22px;
 }
 
@@ -387,10 +396,22 @@ input[type="search"]:focus {
 .content-grid {
   display: grid;
   gap: 22px;
+  min-width: 0;
 }
 
 .content-grid {
   margin-top: 22px;
+}
+
+.content-grid > *,
+.panel-grid > *,
+.split-grid > *,
+.workspace-grid > *,
+.monitoring-command-grid > *,
+.monitoring-bottom-grid > *,
+.mapping-workspace-shell > *,
+.mapping-inline-dock > * {
+  min-width: 0;
 }
 
 .hero,
@@ -399,6 +420,7 @@ input[type="search"]:focus {
   border: 1px solid rgba(255, 255, 255, 0.84);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
+  min-width: 0;
 }
 
 .hero {
@@ -1536,6 +1558,7 @@ button:hover,
   justify-content: space-between;
   align-items: start;
   gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 20px;
 }
 
